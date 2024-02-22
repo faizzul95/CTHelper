@@ -1,0 +1,19 @@
+{
+  "name": "faizzul95/ct-helper",
+  "description": "A helpful PHP library for common tasks and database wrapper (PDO).",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "CanThink Solution"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "CT\\": "src/"
+    }
+  }
+}
