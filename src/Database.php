@@ -10,7 +10,7 @@ namespace CT;
  * @author    Mohd Fahmy Izwan Zulkhafri <faizzul14@gmail.com>
  * @license   http://opensource.org/licenses/gpl-3.0.html GNU Public License
  * @link      -
- * @version   1.0.9
+ * @version   1.0.0
  */
 
 class Database
@@ -1061,6 +1061,36 @@ class Database
         }
 
         return $result;
+    }
+
+    /**
+     * Retrieve the total count of rows returned by the query.
+     *
+     * @return int The total count of rows.
+     */
+    public function count()
+    {
+        // Build the main query to count rows
+        $query = $this->buildQuery();
+
+        // Adjust the query to perform a count
+        $query['sql'] = "SELECT COUNT(*) as count FROM (" . $query['sql'] . ") as count_query";
+
+        // Prepare and execute the main SQL statement
+        $stmt = $this->pdo[$this->connectionName]->prepare($query['sql']);
+        $stmt->execute($query['bindings']);
+
+        // Fetch the count of rows
+        $count = $stmt->fetchColumn();
+
+        // Store the last executed SQL query
+        if (!$this->isEagerMode)
+            $this->_lastQuery = $query['sql'];
+
+        // Reset the query builder's state
+        $this->reset();
+
+        return $count;
     }
 
     /**
