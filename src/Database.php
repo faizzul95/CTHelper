@@ -184,7 +184,7 @@ class Database
     public function connect($connectionName = 'default')
     {
         if (!isset($this->connectionsSettings[$connectionName])) {
-            throw new \Exception('Connection profile not set');
+            throw new \PDOException('Connection profile not set', 404);
         }
 
         $pro = $this->connectionsSettings[$connectionName];
@@ -213,6 +213,7 @@ class Database
             $pdo = new \PDO($dsn, $pro['username'], $pro['password'], $options);
             $this->pdo[$connectionName] = $pdo;
         } catch (\PDOException $e) {
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error connection: ' . $e->getMessage()];
             throw new \Exception('Connect Error: ' . $e->getCode() . ': ' . $e->getMessage(), $e->getCode());
         }
     }
@@ -320,22 +321,39 @@ class Database
     {
         try {
             $stmt = $this->pdo[$this->connectionName]->prepare($query);
-            $stmt->execute($bindParams);
+
+            if ($bindParams !== null) {
+                // Bind parameters based on their type
+                if (is_array($bindParams)) {
+                    // Determine if bindParams is positional or named
+                    $isPositional = array_values($bindParams) === $bindParams;
+
+                    if ($isPositional) {
+                        $stmt->execute($bindParams);
+                    } else {
+                        foreach ($bindParams as $param => $value) {
+                            $stmt->bindValue(':' . $param, $value);
+                        }
+                        $stmt->execute();
+                    }
+                } else {
+                    throw new \PDOException('Bind parameters must be provided as an array', 400);
+                }
+            } else {
+                $stmt->execute();
+            }
 
             // Store the last executed SQL query
             if (!$this->isEagerMode)
                 $this->_lastQuery = $query;
 
-            if ($fetch === 'get') {
-                $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-            } else {
-                $result = $stmt->fetch(\PDO::FETCH_ASSOC);
-            }
+            // Fetch results based on the fetch parameter
+            $result = ($fetch === 'get') ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : $stmt->fetch(\PDO::FETCH_ASSOC);
 
             return $result;
         } catch (\PDOException $e) {
-            $this->_error = ['code' => $e->getCode(), 'message' => 'Error executing raw SQL query: ' . $e->getMessage()];
-            throw new \Exception('Error executing raw SQL query: ' . $e->getMessage(), $e->getCode());
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error executing raw SQL query: ' . $e->getMessage()];
+            throw new \Exception('Error executing raw SQL query: ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -395,8 +413,8 @@ class Database
             return $response;
         } catch (\PDOException $e) {
             $this->rollback(); // Rollback transaction
-            $this->_error = ['code' => $e->getCode(), 'message' => 'Error executing insert query: ' . $e->getMessage()];
-            throw new \Exception('Error executing insert query: ' . $e->getMessage(), $e->getCode());
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error executing insert query: ' . $e->getMessage()];
+            throw new \Exception('Error executing insert query: ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -467,9 +485,9 @@ class Database
             return $response;
         } catch (\PDOException $e) {
             $this->rollback(); // Rollback transaction
-            $this->_error = ['code' => $e->getCode(), 'message' => 'Error executing insert query: ' . $e->getMessage()];
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error executing insert query: ' . $e->getMessage()];
             // Throw an exception if an error occurs during the insert operation
-            throw new \Exception('Error executing insert query: ' . $e->getMessage(), $e->getCode());
+            throw new \Exception('Error executing insert query: ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -478,7 +496,7 @@ class Database
      *
      * @param string $table The name of the table to update data in.
      * @param array $data An associative array where keys represent column names and values represent corresponding data to be updated.
-     * @param string $condition (Optional) The condition to apply in the WHERE clause.
+     * @param string|array $condition (Optional) The condition to apply in the WHERE clause.
      *
      * @return array Returns an array containing information about the update status:
      *               - 'code' (int): The status code indicating the success or failure of the update (200 for success, 422 for failure).
@@ -486,11 +504,11 @@ class Database
      *               - 'message' (string): A status message indicating the outcome of the update operation.
      *               - 'data' (array): The sanitized data that was attempted to be updated.
      */
-    public function update($table, $data, $condition = '')
+    public function update($table, $data, $condition = NULL)
     {
         try {
             if ($this->isMultiDimensionalArray($data)) {
-                throw new \Exception('Batch updates are not supported using this function.', 422);
+                throw new \PDOException('Batch updates are not supported using this function.', 422);
             }
 
             $this->beginTransaction(); // Begin transaction
@@ -531,8 +549,8 @@ class Database
             return $response;
         } catch (\PDOException $e) {
             $this->rollback(); // Rollback transaction
-            $this->_error = ['code' => $e->getCode(), 'message' => 'Error executing update query: ' . $e->getMessage()];
-            throw new \Exception('Error executing update query: ' . $e->getMessage(), $e->getCode());
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error executing update query: ' . $e->getMessage()];
+            throw new \Exception('Error executing update query: ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -548,13 +566,17 @@ class Database
      *               - 'message' (string): A status message indicating the outcome of the deletion operation.
      *               - 'data' (array): The data that was deleted.
      */
-    public function delete($table, $condition = '')
+    public function delete($table, $condition = [])
     {
         try {
+            if (!is_array($condition) || empty($condition)) {
+                throw new \Exception('The condition must be an array and cannot be empty.', 422);
+            }
+
             $this->beginTransaction(); // Begin transaction
 
             // Build the SQL SELECT statement to fetch data before deletion
-            $selectSql = $this->table($table)->where($condition)->toSql();
+            $selectSql = $this->table($table)->where($condition)->getFullSql();
 
             // Prepare and execute the SELECT statement
             $selectStmt = $this->pdo[$this->connectionName]->prepare($selectSql);
@@ -563,27 +585,35 @@ class Database
             // Fetch the data before deletion
             $deletedData = $selectStmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            // Build the SQL DELETE statement
-            $deleteSql = $this->_lastQuery = $this->buildDeleteQuery($table, $condition);
+            if (!empty($deletedData)) {
+                // Build the SQL DELETE statement
+                $deleteSql = $this->_lastQuery = $this->buildDeleteQuery($table, $condition);
 
-            // Prepare the SQL DELETE statement
-            $deleteStmt = $this->pdo[$this->connectionName]->prepare($deleteSql);
+                // Prepare the SQL DELETE statement
+                $deleteStmt = $this->pdo[$this->connectionName]->prepare($deleteSql);
 
-            // Execute the SQL DELETE statement
-            $success = $deleteStmt->execute();
+                // Execute the SQL DELETE statement
+                $success = $deleteStmt->execute();
 
-            // Get the number of affected rows
-            $affectedRows = $deleteStmt->rowCount();
+                // Get the number of affected rows
+                $affectedRows = $deleteStmt->rowCount();
 
-            $this->commit(); // Commit transaction
+                $this->commit(); // Commit transaction
 
-            // Return information about the deletion operation
-            $response = [
-                'code' => $success ? 200 : 422,
-                'affected_rows' => $affectedRows,
-                'message' => $success ? 'Data deleted successfully' : 'Failed to delete data',
-                'data' => $deletedData,
-            ];
+                // Return information about the deletion operation
+                $response = [
+                    'code' => $success ? 200 : 422,
+                    'affected_rows' => $affectedRows,
+                    'message' => $success ? 'Data deleted successfully' : 'Failed to delete data',
+                    'data' => $deletedData,
+                ];
+            } else {
+                $response = [
+                    'code' => 400,
+                    'message' => 'No data has been deleted',
+                    'data' => [],
+                ];
+            }
 
             // Reset the query builder's state
             $this->reset();
@@ -591,8 +621,8 @@ class Database
             return $response;
         } catch (\PDOException $e) {
             $this->rollback(); // Rollback transaction
-            $this->_error = ['code' => $e->getCode(), 'message' => 'Error executing delete query: ' . $e->getMessage()];
-            throw new \Exception('Error executing delete query: ' . $e->getMessage(), $e->getCode());
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error executing delete query: ' . $e->getMessage()];
+            throw new \Exception('Error executing delete query: ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -601,11 +631,25 @@ class Database
      *
      * @param string $table The table name.
      * @return $this
+     * @throws \Exception if the table does not exist
      */
     public function table($table)
     {
-        $this->table = $table;
-        return $this;
+        try {
+            // Check if the table exists
+            $stmt = $this->pdo[$this->connectionName]->query("SHOW TABLES LIKE '$table'");
+            if ($stmt->rowCount() == 0) {
+                throw new \PDOException("Table '$table' does not exist", 404);
+            }
+
+            // Assign the table name
+            $this->table = $table;
+            return $this;
+        } catch (\PDOException $e) {
+            // Handle PDO exception
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error accessing database: ' . $e->getMessage()];
+            throw new \Exception('Error accessing database: ' . $e->getMessage(), (int) $e->getCode());
+        }
     }
 
     /**
@@ -1339,10 +1383,10 @@ class Database
      *
      * @param string $table The name of the table to update data in.
      * @param array $data An associative array where keys are column names and values are the corresponding values to update.
-     * @param string|array $condition Optional. The condition(s) to specify which rows to update.
+     * @param string|array $conditions Optional. The condition(s) to specify which rows to update.
      * @return string|null The generated SQL UPDATE statement or null if $data is not valid.
      */
-    protected function buildUpdateQuery($table, $data, $condition = '')
+    protected function buildUpdateQuery($table, $data, $conditions = NULL)
     {
         // Check if $data is an array and not empty
         if (!is_array($data) || empty($data)) {
@@ -1360,13 +1404,16 @@ class Database
         // Construct the SQL update statement
         $sql = "UPDATE $table SET $setClause";
 
-        // Add the condition if provided
-        if (!empty($condition)) {
-            if (is_array($condition)) {
-                // If $condition is an array, join the conditions with AND
-                $condition = implode(' AND ', $condition);
+        if (!empty($conditions)) {
+            if (is_array($conditions)) {
+                $whereClause = [];
+                foreach ($conditions as $key => $value) {
+                    $whereClause[] = "$key = " . $this->sanitize($value);
+                }
+                $sql .= " WHERE " . implode(' AND ', $whereClause);
+            } else {
+                $sql .= " WHERE $conditions";
             }
-            $sql .= " WHERE $condition";
         }
 
         // Return the SQL statement
@@ -1377,21 +1424,24 @@ class Database
      * Build an SQL DELETE statement with PDO binding.
      *
      * @param string $table The name of the table to delete from.
-     * @param string|array $condition Optional. The condition(s) to specify which rows to delete.
+     * @param string|array $conditions Optional. The condition(s) to specify which rows to delete.
      * @return string|null The generated SQL DELETE statement or null if $condition is not valid.
      */
-    protected function buildDeleteQuery($table, $condition = '')
+    protected function buildDeleteQuery($table, $conditions = NULL)
     {
         // Construct the SQL delete statement
         $sql = "DELETE FROM $table";
 
         // Add the condition if provided
-        if (!empty($condition)) {
-            if (is_array($condition)) {
-                // If $condition is an array, join the conditions with AND
-                $condition = implode(' AND ', $condition);
+        if (!empty($conditions)) {
+            if (is_array($conditions)) {
+                // Construct WHERE conditions
+                $whereClause = [];
+                foreach ($conditions as $key => $value) {
+                    $whereClause[] = "$key = " . $this->sanitize($value);
+                }
+                $sql .= " WHERE " . implode(' AND ', $whereClause);
             }
-            $sql .= " WHERE $condition";
         }
 
         // Return the SQL statement
@@ -1508,13 +1558,13 @@ class Database
                 foreach ($value as &$val) {
                     // Check if $val is not null and not empty, and not equal to 0
                     if (!is_null($val) && !empty($val) && !is_integer($val)) {
-                        $val = htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); // Apply XSS protection to $val
+                        $val = htmlspecialchars(trim($val), ENT_QUOTES, 'UTF-8'); // Apply XSS protection to $val
                     }
                 }
                 return $value;
             } else {
                 // Sanitize a single value
-                return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+                return htmlspecialchars(trim($value), ENT_QUOTES, 'UTF-8');
             }
         } else {
             // Return input as-is if secure mode is disabled
@@ -1548,18 +1598,13 @@ class Database
         $stmt->execute();
         $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
 
+        // Filter $data array based on $columns_table
+        $data = array_intersect_key($data, array_flip($columns_table));
+
         // Sanitize each value in the $data array
-        foreach ($data as $key => $value) {
-            // Check if the key exists in the table columns
-            if (in_array($key, $columns_table)) {
-                // Sanitize the value if it's not null or empty
-                if (!is_null($value) && $value !== '') {
-                    $data[$key] = $this->sanitize($value);
-                }
-            } else {
-                unset($data[$key]); // Column doesn't exist, so unset it
-            }
-        }
+        $data = array_map(function ($value) {
+            return !is_null($value) && $value !== '' ? $this->sanitize($value) : $value;
+        }, $data);
 
         return $data;
     }

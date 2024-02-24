@@ -63,7 +63,7 @@ function runTest($scriptNames)
 
 // TEST SCRIPT
 
-$db = new Database('localhost', 'root', '', 'yyyy_db');
+$db = new Database('localhost', 'root', '', 'plant_db');
 
 /**
  * Script 1     : Add another connection & connect to connection.
@@ -329,14 +329,15 @@ function script12()
 /**
  * Script 13    : Fetch user profile data with associated role and permissions using raw SQL queries.
  * Expectation  : Retrieve user profile data along with the associated role and permissions using raw SQL queries.
- * Remark       : This script fetches user profile data for a specific user along with the associated role and permissions using raw SQL queries. It constructs SQL queries directly for efficient retrieval of the required data and their relations.
+ * Remark       : This script fetches user profile data for a specific user along with the associated role and permissions using raw SQL queries. 
+ *                It constructs SQL queries directly for efficient retrieval of the required data and their relations.
  * Result       : Pass.
  */
 function script13()
 {
     $db = Database::getInstance();
     $profile = $db->rawQuery('SELECT id,user_id,role_id,is_main,profile_status FROM user_profile WHERE user_id = ? AND is_main = ?', [1, 1], 'fetch');
-    $profile['roles'] = $db->rawQuery('SELECT id,role_name,role_status FROM master_roles WHERE id = ? AND role_status = ?', [1], 'fetch');
+    $profile['roles'] = $db->rawQuery('SELECT id,role_name,role_status FROM master_roles WHERE id = ? AND role_status = ?', [$profile['role_id'], 1], 'fetch');
     $profile['roles']['permission'] = $db->rawQuery('SELECT id,role_id,abilities_id,forbidden FROM system_permission WHERE forbidden = ?', [0]);
 
     return $profile;
@@ -345,7 +346,9 @@ function script13()
 /**
  * Script 14    : Retrieve user profile information with associated files, roles, and permissions.
  * Expectation  : Retrieve user profile information along with associated files, roles, and permissions.
- * Remark       : This script fetches user profile information including user ID, role ID, and other details. It also includes the associated profile avatar and header files, along with the roles associated with the user and their permissions. The script utilizes eager loading to efficiently fetch related data.
+ * Remark       : This script fetches user profile information including user ID, role ID, and other details. It also includes the associated profile avatar and header files, 
+ *                along with the roles associated with the user and their permissions. 
+ *                The script utilizes eager loading to efficiently fetch related data.
  * Result       : Pass.
  */
 function script14()
@@ -379,6 +382,85 @@ function script14()
     return $users;
 }
 
+/**
+ * Script 15    : Test XSS filtering before saving to the database.
+ * Expectation  : Ensure that XSS (Cross-Site Scripting) attacks are prevented by converting potentially harmful scripts.
+ * Remark       : The 'secure' tag is set to 'true' to test if XSS will be converted before saving to the database.
+ * Result       : Pass.
+ */
+function script15()
+{
+    $db = Database::getInstance();
+    return $db->insert('plant', [
+        'plant_code' => 'T0006',
+        'plant_name' => "<IMG SRC=j&#X41vascript:alert('test2')>", // XSS Script
+        'plant_family' => 'Akar',
+        'plant_botany_name' => "<b onmouseover=alert('Wufff!')>click me!</b>", // XSS Script
+        'plant_type_id' => '2',
+        'plant_category_id' => 1,
+        'plantcategory_id343242' => 1, // This column doesn't exist and will be removed upon insertion
+    ]);
+}
+
+/**
+ * Script 16    : Test XSS filtering with secure tag set to false.
+ * Expectation  : Evaluate whether XSS filtering is disabled when the secure tag is set to false using secureInput() function.
+ * Remark       : The 'secure' tag is set to false to test if XSS filtering is bypassed.
+ *                Additionally, it removes the invalid column 'plantcategory_id343242'.
+ * Result       : Pass.
+ */
+function script16()
+{
+    $db = Database::getInstance();
+    return $db->secureInput(false)->insert('plant', [
+        'plant_code' => 'T0007',
+        'plant_name' => "<IMG SRC=j&#X41vascript:alert('test2')>", // XSS Script
+        'plant_family' => 'Pokok',
+        'plant_botany_name' => "<b onmouseover=alert('Wufff!')>click me!</b>", // XSS Script
+        'plant_type_id' => '3',
+        'plant_category_id' => 3,
+        'plantcategory_id343242' => 4, // This column doesn't exist and will be removed upon insertion
+    ]);
+}
+
+
+/**
+ * Script 17    : Test updating data in the 'plant' table with XSS vulnerability and invalid column removal.
+ * Expectation  : Ensure that data can be updated in the 'plant' table while preventing XSS attacks and removing invalid columns.
+ * Remark       : This script updates plant data with potential XSS vulnerability in 'plant_name' and 'plant_botany_name' fields.
+ *                Additionally, it removes the invalid column 'plantcategory_id343242'.
+ * Result       : Pass.
+ */
+function script17()
+{
+    $db = Database::getInstance();
+    return $db->update(
+        'plant',
+        [
+            'plant_code' => 'T0007-1',
+            'plant_name' => "<IMG SRC=j&#X41vascript:alert('test3')>", // XSS Script
+            'plant_family' => 'Akar',
+            'plant_botany_name' => "<b onmouseover=alert('Wufff!')>click me!</b>", // XSS Script
+            'plant_type_id' => '1',
+            'plant_category_id' => 6,
+            'plantcategory_id343242' => 3, // This column doesn't exist and will be removed upon insertion
+        ],
+        ['id' => 6] // also can use as string conditions 'id = 6' (Only use if has advanced conditions)
+    );
+}
+
+/**
+ * Script 18    : Test deleting a record from the 'plant' table.
+ * Expectation  : Verify that the record with ID 7 is successfully deleted from the 'plant' table.
+ * Remark       : This script specifically targets the deletion of a record with ID 7.
+ * Result       : Pass.
+ */
+function script18()
+{
+    $db = Database::getInstance();
+    return $db->delete('plant', ['id' => 7]);
+}
+
 dd(runTest(
     [
         // 'script1',
@@ -394,6 +476,10 @@ dd(runTest(
         // 'script11'
         // 'script12',
         // 'script13',
-        'script14',
+        // 'script14',
+        // 'script15',
+        // 'script16',
+        // 'script17',
+        'script18',
     ]
 ));
