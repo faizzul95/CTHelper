@@ -113,11 +113,6 @@ class Database
     protected $joins = [];
 
     /**
-     * @var array The subqueries.
-     */
-    protected $subqueries = [];
-
-    /**
      * @var array The relations use for eager loading (N+1).
      */
     protected $relations = [];
@@ -183,33 +178,33 @@ class Database
      */
     public function connect($connectionName = 'default')
     {
-        if (!isset($this->connectionsSettings[$connectionName])) {
-            throw new \PDOException('Connection profile not set', 404);
-        }
-
-        $pro = $this->connectionsSettings[$connectionName];
-
-        // Set default charset to utf8mb4 if not specified
-        $charset = isset($pro['charset']) ? $pro['charset'] : 'utf8mb4';
-
-        // Build DSN (Data Source Name)
-        $dsn = "mysql:host={$pro['host']};dbname={$pro['db']};charset={$charset}";
-        if (isset($pro['port'])) {
-            $dsn .= ";port={$pro['port']}";
-        }
-
-        if (isset($pro['socket'])) {
-            $dsn .= ";unix_socket={$pro['socket']}";
-        }
-
-        // Connection options
-        $options = [
-            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-            \PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset}"
-        ];
-
         try {
+            if (!isset($this->connectionsSettings[$connectionName])) {
+                throw new \PDOException('Connection profile not set', 404);
+            }
+
+            $pro = $this->connectionsSettings[$connectionName];
+
+            // Set default charset to utf8mb4 if not specified
+            $charset = isset($pro['charset']) ? $pro['charset'] : 'utf8mb4';
+
+            // Build DSN (Data Source Name)
+            $dsn = "mysql:host={$pro['host']};dbname={$pro['db']};charset={$charset}";
+            if (isset($pro['port'])) {
+                $dsn .= ";port={$pro['port']}";
+            }
+
+            if (isset($pro['socket'])) {
+                $dsn .= ";unix_socket={$pro['socket']}";
+            }
+
+            // Connection options
+            $options = [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                \PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset}"
+            ];
+
             $pdo = new \PDO($dsn, $pro['username'], $pro['password'], $options);
             $this->pdo[$connectionName] = $pdo;
         } catch (\PDOException $e) {
@@ -643,7 +638,7 @@ class Database
             }
 
             // Assign the table name
-            $this->table = $table;
+            $this->table = trim($table);
             return $this;
         } catch (\PDOException $e) {
             // Handle PDO exception
@@ -674,7 +669,6 @@ class Database
         $this->orWhereBetween = [];
         $this->having = [];
         $this->joins = [];
-        $this->subqueries = [];
         $this->relations = [];
         $this->connectionName = 'default';
         $this->_error = [];
@@ -700,9 +694,14 @@ class Database
      *
      * @param int $limit The limit for the query.
      * @return $this
+     * @throws \InvalidArgumentException If the $limit parameter is not an integer.
      */
     public function limit($limit)
     {
+        if (!is_int($limit)) {
+            throw new \InvalidArgumentException('Limit must be an integer.');
+        }
+
         $this->limit = $limit;
         return $this;
     }
@@ -713,9 +712,15 @@ class Database
      * @param string|array $columns The order by columns.
      * @param string $direction The order direction.
      * @return $this
+     * @throws \InvalidArgumentException If the $direction parameter is not "ASC" or "DESC".
      */
     public function orderBy($columns, string $direction = 'ASC')
     {
+        // Check if direction is valid
+        if (!in_array(strtoupper($direction), ['ASC', 'DESC'])) {
+            throw new \InvalidArgumentException('Order direction must be "ASC" or "DESC".');
+        }
+
         $this->orderBy = is_array($columns) ? $columns : [[$columns, $direction]];
         return $this;
     }
@@ -889,33 +894,21 @@ class Database
      *
      * @param string $table The table to join.
      * @param string $condition The join condition.
-     * @param string $type The type of join (e.g., INNER, LEFT, RIGHT).
+     * @param string $joinType The type of join (e.g., INNER, LEFT, RIGHT, OUTER, LEFT OUTER, RIGHT OUTER, NATURAL).
      * @return $this
+     * @throws \InvalidArgumentException If the $joinType parameter is not a valid join type.
      */
-    public function join($table, $condition, $type = 'INNER')
+    public function join($table, $condition, $joinType = 'LEFT')
     {
-        $this->joins[] = [$type, $table, $condition];
-        return $this;
-    }
+        // List of valid join types
+        $validJoinTypes = ['INNER', 'LEFT', 'RIGHT', 'OUTER', 'LEFT OUTER', 'RIGHT OUTER', 'NATURAL'];
 
-    /**
-     * Add a subquery to the main query.
-     *
-     * @param string $alias The alias for the subquery.
-     * @param Closure $callback The callback function to define the subquery.
-     * @return $this
-     */
-    public function subQuery($alias, \Closure $callback)
-    {
-        // Create a new instance of Database for the subquery
-        $subquery = new Database();
+        // Check if joinType is valid
+        if (!in_array(strtoupper($joinType), $validJoinTypes)) {
+            throw new \InvalidArgumentException('Invalid join type. Allowed values are INNER, LEFT, RIGHT, OUTER, LEFT OUTER, RIGHT OUTER, NATURAL.');
+        }
 
-        // Call the callback function to define the subquery
-        $callback($subquery);
-
-        // Add the subquery to the subqueries array
-        $this->subqueries[$alias] = $subquery;
-
+        $this->joins[] = [strtoupper($joinType), $table, $condition];
         return $this;
     }
 
@@ -1226,6 +1219,10 @@ class Database
      */
     protected function buildQuery()
     {
+        if (empty($this->table)) {
+            throw new \Exception('No table selected', 400);
+        }
+
         $sql = 'SELECT ' . $this->fields . ' FROM ' . $this->table;
         $bindings = [];
 
@@ -1234,14 +1231,6 @@ class Database
             $sql .= implode('', array_map(function ($join) {
                 return ' ' . $join[0] . ' JOIN ' . $join[1] . ' ON ' . $join[2];
             }, $this->joins));
-        }
-
-        // Subqueries clauses
-        if (!empty($this->subqueries)) {
-            foreach ($this->subqueries as $alias => $subQuery) {
-                $sql .= " ({$subQuery->toSql()}) AS $alias";
-                $bindings = array_merge($bindings, $subQuery->buildQuery()['bindings']); // Merge bindings
-            }
         }
 
         // WHERE clause
@@ -1256,9 +1245,18 @@ class Database
         if (!empty($this->whereIn)) {
             $sql .= $this->containsWhere($sql, 'AND');
             $sql .= implode(' AND ', array_map(function ($condition) use (&$bindings) {
-                $values = implode(', ', array_fill(0, count($condition[1]), '?'));
-                $bindings = array_merge($bindings, $condition[1]);
-                return $condition[0] . ' IN (' . $values . ')';
+                if (is_array($condition[1])) {
+                    $values = implode(', ', array_fill(0, count($condition[1]), '?'));
+                    $bindings = array_merge($bindings, $condition[1]);
+                    return $condition[0] . ' IN (' . $values . ')';
+                } else if ($this->isSqlSubquery($condition[1])) {
+                    // Check if $condition[1] starts and ends with parentheses
+                    $isParenthesized = (substr($condition[1], 0, 1) === '(' && substr($condition[1], -1) === ')');
+                    // Concatenate the condition based on whether parentheses are present or not
+                    return $condition[0] . ' IN ' . ($isParenthesized ? $condition[1] : '(' . $condition[1] . ')');
+                } else {
+                    return $condition;
+                }
             }, $this->whereIn));
         }
 
@@ -1266,9 +1264,18 @@ class Database
         if (!empty($this->whereNotIn)) {
             $sql .= $this->containsWhere($sql, 'AND');
             $sql .= implode(' AND ', array_map(function ($condition) use (&$bindings) {
-                $values = implode(', ', array_fill(0, count($condition[1]), '?'));
-                $bindings = array_merge($bindings, $condition[1]);
-                return $condition[0] . ' NOT IN (' . $values . ')';
+                if (is_array($condition[1])) {
+                    $values = implode(', ', array_fill(0, count($condition[1]), '?'));
+                    $bindings = array_merge($bindings, $condition[1]);
+                    return $condition[0] . ' NOT IN (' . $values . ')';
+                } else if ($this->isSqlSubquery($condition[1])) {
+                    // Check if $condition[1] starts and ends with parentheses
+                    $isParenthesized = (substr($condition[1], 0, 1) === '(' && substr($condition[1], -1) === ')');
+                    // Concatenate the condition based on whether parentheses are present or not
+                    return $condition[0] . ' NOT IN ' . ($isParenthesized ? $condition[1] : '(' . $condition[1] . ')');
+                } else {
+                    return $condition;
+                }
             }, $this->whereNotIn));
         }
 
@@ -1295,9 +1302,18 @@ class Database
         if (!empty($this->orWhereIn)) {
             $sql .= $this->containsWhere($sql, 'OR');
             $sql .= implode(' OR ', array_map(function ($condition) use (&$bindings) {
-                $values = implode(', ', array_fill(0, count($condition[1]), '?'));
-                $bindings = array_merge($bindings, $condition[1]);
-                return $condition[0] . ' IN (' . $values . ')';
+                if (is_array($condition[1])) {
+                    $values = implode(', ', array_fill(0, count($condition[1]), '?'));
+                    $bindings = array_merge($bindings, $condition[1]);
+                    return $condition[0] . ' IN (' . $values . ')';
+                } else if ($this->isSqlSubquery($condition[1])) {
+                    // Check if $condition[1] starts and ends with parentheses
+                    $isParenthesized = (substr($condition[1], 0, 1) === '(' && substr($condition[1], -1) === ')');
+                    // Concatenate the condition based on whether parentheses are present or not
+                    return $condition[0] . ' IN ' . ($isParenthesized ? $condition[1] : '(' . $condition[1] . ')');
+                } else {
+                    return $condition;
+                }
             }, $this->orWhereIn));
         }
 
@@ -1305,9 +1321,18 @@ class Database
         if (!empty($this->orWhereNotIn)) {
             $sql .= $this->containsWhere($sql, 'OR');
             $sql .= implode(' OR ', array_map(function ($condition) use (&$bindings) {
-                $values = implode(', ', array_fill(0, count($condition[1]), '?'));
-                $bindings = array_merge($bindings, $condition[1]);
-                return $condition[0] . ' NOT IN (' . $values . ')';
+                if (is_array($condition[1])) {
+                    $values = implode(', ', array_fill(0, count($condition[1]), '?'));
+                    $bindings = array_merge($bindings, $condition[1]);
+                    return $condition[0] . ' NOT IN (' . $values . ')';
+                } else if ($this->isSqlSubquery($condition[1])) {
+                    // Check if $condition[1] starts and ends with parentheses
+                    $isParenthesized = (substr($condition[1], 0, 1) === '(' && substr($condition[1], -1) === ')');
+                    // Concatenate the condition based on whether parentheses are present or not
+                    return $condition[0] . ' NOT IN ' . ($isParenthesized ? $condition[1] : '(' . $condition[1] . ')');
+                } else {
+                    return $condition;
+                }
             }, $this->orWhereNotIn));
         }
 
@@ -1513,7 +1538,7 @@ class Database
 
         // Replace placeholders with actual values
         return vsprintf(str_replace('?', '%s', $sql), array_map(function ($value) {
-            return is_numeric($value) ? $value : "'" . $value . "'";
+            return is_numeric($value) || $this->isSqlSubquery($value) ? $value : "'" . $value . "'";
         }, $bindings));
     }
 
@@ -1546,7 +1571,7 @@ class Database
     protected function sanitize($value = null)
     {
         // Check if $value is not null or empty
-        if (!isset($value) || is_null($value) || is_integer($value)) {
+        if (!isset($value) || is_null($value) || is_integer($value) || $this->isSqlSubquery($value)) {
             return $value;
         }
 
@@ -1634,6 +1659,25 @@ class Database
             }
         }
         return false;
+    }
+
+    /**
+     * Check if a value represents a SQL subquery.
+     *
+     * @param string $value The value to check.
+     * @return bool True if the value is a SQL subquery, false otherwise.
+     */
+    private function isSqlSubquery($value)
+    {
+        if (is_string($value) && !empty($value)) {
+            // Regular expression pattern to match SQL subquery syntax
+            $pattern = '/\b(?:SELECT|INSERT|UPDATE|DELETE)\b.*?\bFROM\b/';
+
+            // Check if the pattern matches the value
+            return preg_match($pattern, $value) === 1;
+        }
+
+        return;
     }
 
     /**
