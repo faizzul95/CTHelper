@@ -63,7 +63,7 @@ function runTest($scriptNames)
 
 // TEST SCRIPT
 
-$db = new Database('localhost', 'root', '', 'plant_db');
+$db = new Database('mysql','localhost', 'root', '', 'plant_db');
 
 /**
  * Script 1     : Add another connection & connect to connection.
@@ -71,6 +71,7 @@ $db = new Database('localhost', 'root', '', 'plant_db');
  * Result       : Pass.
  */
 $db->addConnection('slave', array(
+    'driver' => 'mysql',
     'host' => 'localhost',
     'username' => 'root',
     'password' => '',
@@ -165,7 +166,7 @@ function script4()
 function script5()
 {
     $db = Database::getInstance();
-    return $db->table('users')->orderBy('name', 'desc')->limit(3)->get();
+    return $db->table('users')->orderBy('name', 'asc')->limit(3)->get();
     // return $db->table('users')->orderBy([['name', 'desc'], ['user_status', 'desc']])->limit(3)->get();
 }
 
@@ -414,6 +415,7 @@ function script16()
     $db = Database::getInstance();
     return $db->secureInput(false)->insert('plant', [
         'plant_code' => 'T0007',
+        'plant_name_noxist' => "<IMG SRC=j&#X41vascript:alert('test2')>", // XSS Script
         'plant_name' => "<IMG SRC=j&#X41vascript:alert('test2')>", // XSS Script
         'plant_family' => 'Pokok',
         'plant_botany_name' => "<b onmouseover=alert('Wufff!')>click me!</b>", // XSS Script
@@ -443,9 +445,9 @@ function script17()
             'plant_botany_name' => "<b onmouseover=alert('Wufff!')>click me!</b>", // XSS Script
             'plant_type_id' => '1',
             'plant_category_id' => 6,
-            'plantcategory_id343242' => 3, // This column doesn't exist and will be removed upon insertion
+            'plantcategory_id343242' => 10, // This column doesn't exist and will be removed upon insertion
         ],
-        ['id' => 6] // also can use as string conditions 'id = 6' (Only use if has advanced conditions)
+        ['id' => 9] // also can use as string conditions 'id = 6' (Only use if has advanced conditions)
     );
 }
 
@@ -458,7 +460,38 @@ function script17()
 function script18()
 {
     $db = Database::getInstance();
-    return $db->delete('plant', ['id' => 7]);
+    return $db->delete('plant', ['id' => 9]);
+}
+
+/**
+ * Script 19    : Get SQL query for selecting users with first_login equals 1 and id greater than 1.
+ * Expectation  : To retrieve SQL query for fetching users with specific conditions.
+ * Remark       : 
+ * Result       : -
+ */
+function script19()
+{
+    $db = Database::getInstance();
+    return $db->table('users')
+        ->where('first_login', 1)
+        ->having('id', 1, '>')
+        ->toSql();
+}
+
+/**
+ * Script 20    : Get full SQL query with complex conditions involving EXISTS, IN, and OR clauses.
+ * Expectation  : To retrieve a complex SQL query involving various conditions.
+ * Remark       : 
+ * Result       : -.
+ */
+function script20()
+{
+    $db = Database::getInstance();
+    return $db->table('users')
+        ->where('first_login', 'EXISTS (SELECT AVG(column2) FROM table1 WHERE column3 = t1.column3)', '')
+        ->whereIn('first_login', '(SELECT AVG(column2) FROM table1 WHERE column3 = t1.column5)')
+        ->orWhereNotIn('status', '(SELECT * FROM table1 WHERE column3 = t1.column5)')
+        ->getFullSql();
 }
 
 dd(runTest(
@@ -481,5 +514,7 @@ dd(runTest(
         // 'script16',
         // 'script17',
         'script18',
+        // 'script19',
+        // 'script20',
     ]
 ));

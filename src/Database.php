@@ -28,6 +28,11 @@ class Database
     protected $pdo;
 
     /**
+     * @var string $driver The database driver being used (e.g., 'mysql', 'oracle', 'sqlite', etc.).
+     */
+    protected $driver = 'mysql';
+
+    /**
      * @var array connections settings [profile_name=>[same_as_contruct_args]]
      */
     protected $connectionsSettings = array();
@@ -140,24 +145,33 @@ class Database
     /**
      * Constructor.
      *
-     * @param string $host The host of the database server.
-     * @param string $username The username for the database connection.
-     * @param string $password The password for the database connection.
-     * @param string $database The name of the database.
+     * @param string $driver The database driver to be used (e.g., mysql, mssql, oracle, sqlite, firebird).
+     * @param string|null $host The host of the database server.
+     * @param string|null $username The username for the database connection.
+     * @param string|null $password The password for the database connection.
+     * @param string|null $database The name of the database.
+     * @param int|null $port The port number of the database server.
+     * @param string|null $charset The character set for the database connection (default is 'utf8mb4').
+     * @param string|null $socket The socket name or path to the Unix socket for the connection.
      */
-    public function __construct($host = null, $username = null, $password = null, $database = null, $port = null, $charset = 'utf8mb4', $socket = null)
+    public function __construct($driver = 'mysql', $host = null, $username = null, $password = null, $database = null, $port = null, $charset = 'utf8mb4', $socket = null)
     {
+        if (!in_array($driver, ['mysql', 'mssql', 'oracle', 'sqlite', 'firebird'])) {
+            throw new \InvalidArgumentException("Invalid database driver '{$driver}' provided.");
+        }
+
         if (!isset($this->connectionsSettings['default'])) {
             $this->addConnection(
                 'default',
                 array(
+                    'driver' => $driver,
                     'host' => $host,
                     'username' => $username,
                     'password' => $password,
                     'db' => $database,
                     'port' => $port,
-                    'socket' => $socket,
-                    'charset' => $charset
+                    'charset' => $charset,
+                    'socket' => $socket
                 )
             );
         }
@@ -188,22 +202,49 @@ class Database
             // Set default charset to utf8mb4 if not specified
             $charset = isset($pro['charset']) ? $pro['charset'] : 'utf8mb4';
 
-            // Build DSN (Data Source Name)
-            $dsn = "mysql:host={$pro['host']};dbname={$pro['db']};charset={$charset}";
-            if (isset($pro['port'])) {
-                $dsn .= ";port={$pro['port']}";
-            }
+            // Define database driver
+            $this->driver = isset($pro['driver']) ? strtolower($pro['driver']) : 'mysql';
 
-            if (isset($pro['socket'])) {
-                $dsn .= ";unix_socket={$pro['socket']}";
+            // Build DSN (Data Source Name) based on database driver
+            switch ($this->driver) {
+                case 'mysql':
+                    $dsn = "mysql:host={$pro['host']};dbname={$pro['db']};charset={$charset}";
+                    if (isset($pro['port'])) {
+                        $dsn .= ";port={$pro['port']}";
+                    }
+                    if (isset($pro['socket'])) {
+                        $dsn .= ";unix_socket={$pro['socket']}";
+                    }
+                    break;
+                case 'mssql':
+                    $dsn = "sqlsrv:Server={$pro['host']};Database={$pro['db']}";
+                    if (isset($pro['port'])) {
+                        $dsn .= ";port={$pro['port']}";
+                    }
+                    break;
+                case 'oracle':
+                    $dsn = "oci:dbname={$pro['host']}/{$pro['db']}";
+                    break;
+                case 'sqlite':
+                    $dsn = "sqlite:{$pro['host']}";
+                    break;
+                case 'firebird':
+                    $dsn = "firebird:dbname={$pro['host']}";
+                    break;
+                default:
+                    throw new \PDOException('Unsupported database driver', 404);
             }
 
             // Connection options
             $options = [
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-                \PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset}"
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC
             ];
+
+            // Specific options for MySQL
+            if ($this->driver === 'mysql') {
+                $options[\PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES {$charset}";
+            }
 
             $pdo = new \PDO($dsn, $pro['username'], $pro['password'], $options);
             $this->pdo[$connectionName] = $pdo;
@@ -224,7 +265,7 @@ class Database
     public function addConnection($name, array $params)
     {
         $this->connectionsSettings[$name] = array();
-        foreach (array('host', 'username', 'password', 'db', 'port', 'socket', 'charset') as $k) {
+        foreach (array('driver', 'host', 'username', 'password', 'db', 'port', 'socket', 'charset') as $k) {
             $prm = isset($params[$k]) ? $params[$k] : null;
 
             if ($k == 'host') {
@@ -626,15 +667,38 @@ class Database
      *
      * @param string $table The table name.
      * @return $this
-     * @throws \Exception if the table does not exist
+     * @throws \Exception if the table does not exist or if there's an error accessing the database.
      */
     public function table($table)
     {
         try {
+            // Check if the table exists based on the database driver
+            switch ($this->driver) {
+                case 'mysql':
+                    $query = "SHOW TABLES LIKE '$table'";
+                    break;
+                case 'mssql':
+                    $query = "IF EXISTS (SELECT * FROM sysobjects WHERE name = '$table' AND xtype = 'U') SELECT 1";
+                    break;
+                case 'oracle':
+                    $query = "SELECT table_name FROM user_tables WHERE table_name = '$table'";
+                    break;
+                case 'firebird':
+                    $query = "SELECT RDB\$RELATION_NAME FROM RDB\$RELATIONS WHERE RDB\$RELATION_NAME = '$table'";
+                    break;
+                case 'sqlite':
+                    $query = "SELECT name FROM sqlite_master WHERE type='table' AND name='$table'";
+                    break;
+                default:
+                    throw new \Exception("Unsupported database driver '{$this->driver}'", 500);
+            }
+
+            // Execute the query to check table existence
+            $stmt = $this->pdo[$this->connectionName]->query($query);
+
             // Check if the table exists
-            $stmt = $this->pdo[$this->connectionName]->query("SHOW TABLES LIKE '$table'");
-            if ($stmt->rowCount() == 0) {
-                throw new \PDOException("Table '$table' does not exist", 404);
+            if ($stmt->fetchColumn() === false) {
+                throw new \Exception("Table '$table' does not exist", 404);
             }
 
             // Assign the table name
@@ -654,6 +718,7 @@ class Database
      */
     public function reset()
     {
+        $this->driver = 'mysql';
         $this->table = null;
         $this->fields = '*';
         $this->limit = null;
@@ -950,6 +1015,7 @@ class Database
      * @param int $currentPage The current page number.
      * @param int $limit The limit per page.
      * @return array The paginated query result.
+     * @throws \Exception If there's an error accessing the database or if the table does not exist.
      */
     public function paginate($currentPage = 1, $limit = 10)
     {
@@ -959,63 +1025,73 @@ class Database
         // Build the main query
         $query = $this->buildQuery();
 
-        // Create a separate query to get total count
-        $sqlTotal = 'SELECT COUNT(*) as count ' . substr($query['sql'], strpos($query['sql'], 'FROM'));
+        try {
+            // Create a separate query to get total count
+            $sqlTotal = 'SELECT COUNT(*) count ' . substr($query['sql'], strpos($query['sql'], 'FROM'));
 
-        // Execute the total count query
-        $stmtTotal = $this->pdo[$this->connectionName]->prepare($sqlTotal);
-        $stmtTotal->execute($query['bindings']);
-        $totalResult = $stmtTotal->fetch(\PDO::FETCH_ASSOC);
+            // Execute the total count query
+            $stmtTotal = $this->pdo[$this->connectionName]->prepare($sqlTotal);
+            $stmtTotal->execute($query['bindings']);
+            $totalResult = $stmtTotal->fetch(\PDO::FETCH_ASSOC);
 
-        // Get total count
-        $total = $totalResult['count'];
+            // Get total count
+            $total = $totalResult['count'];
 
-        // Calculate total pages
-        $totalPages = ceil($total / $limit);
+            // Calculate total pages
+            $totalPages = ceil($total / $limit);
 
-        // Add LIMIT and OFFSET clauses to the main query
-        $query['sql'] .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+            // Add LIMIT and OFFSET clauses to the main query
+            $query['sql'] .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
 
-        // Execute the main query
-        $stmt = $this->pdo[$this->connectionName]->prepare($query['sql']);
-        $stmt->execute($query['bindings']);
-        $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            // Execute the main query
+            $stmt = $this->pdo[$this->connectionName]->prepare($query['sql']);
+            $stmt->execute($query['bindings']);
+            $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-        // Calculate next page
-        $nextPage = ($currentPage < $totalPages) ? $currentPage + 1 : null;
+            // Calculate next page
+            $nextPage = ($currentPage < $totalPages) ? $currentPage + 1 : null;
 
-        // Calculate previous page
-        $previousPage = ($currentPage > 1) ? $currentPage - 1 : null;
+            // Calculate previous page
+            $previousPage = ($currentPage > 1) ? $currentPage - 1 : null;
 
-        // Store the last executed SQL query
-        if (!$this->isEagerMode)
-            $this->_lastQuery = $query['sql'];
+            // Adjust array keys to start from previous count
+            $startIndex = ($currentPage - 1) * $limit;
+            $result = array_combine(range($startIndex, $startIndex + count($result) - 1), $result);
 
-        // Save connection name and relations temporarily
-        $_temp_connection = $this->connectionName;
-        $_temp_relations = $this->relations;
+            // Store the last executed SQL query
+            if (!$this->isEagerMode)
+                $this->_lastQuery = $query['sql'];
 
-        // Reset the query builder's state
-        $this->reset();
+            // Save connection name and relations temporarily
+            $_temp_connection = $this->connectionName;
+            $_temp_relations = $this->relations;
 
-        // Eager loading
-        if (!empty($_temp_relations)) {
-            $this->isEagerMode = true;
-            $eager = Database::$_instance->connection($_temp_connection);
-            foreach ($_temp_relations as $alias => $relation) {
-                $type = $relation['type'] === 'get' ? 'get' : 'fetch';
-                $this->loadRelation($alias, $relation['details'], $result, $eager, $type);
+            // Reset the query builder's state
+            $this->reset();
+
+            // Eager loading
+            if (!empty($_temp_relations)) {
+                $this->isEagerMode = true;
+                $eager = Database::$_instance->connection($_temp_connection);
+                foreach ($_temp_relations as $alias => $relation) {
+                    $type = $relation['type'] === 'get' ? 'get' : 'fetch';
+                    $this->loadRelation($alias, $relation['details'], $result, $eager, $type);
+                }
             }
-        }
 
-        return [
-            'data' => $result,
-            'total' => $total,
-            'current_page' => $currentPage,
-            'next_page' => $nextPage,
-            'previous_page' => $previousPage,
-            'last_page' => $totalPages
-        ];
+            return [
+                'data' => $result,
+                'total' => $total,
+                'current_page' => $currentPage,
+                'next_page' => $nextPage,
+                'previous_page' => $previousPage,
+                'last_page' => $totalPages
+            ];
+        } catch (\PDOException $e) {
+            // Handle PDO exception
+            $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error accessing database: ' . $e->getMessage()];
+            throw new \Exception('Error accessing database: ' . $e->getMessage(), (int) $e->getCode());
+        }
     }
 
     /**
@@ -1111,7 +1187,7 @@ class Database
         $query = $this->buildQuery();
 
         // Adjust the query to perform a count
-        $query['sql'] = "SELECT COUNT(*) as count FROM (" . $query['sql'] . ") as count_query";
+        $query['sql'] = "SELECT COUNT(*) count FROM (" . $query['sql'] . ") as count_query";
 
         // Prepare and execute the main SQL statement
         $stmt = $this->pdo[$this->connectionName]->prepare($query['sql']);
@@ -1437,7 +1513,7 @@ class Database
                 }
                 $sql .= " WHERE " . implode(' AND ', $whereClause);
             } else {
-                $sql .= " WHERE $conditions";
+                $sql .= " WHERE " . $this->sanitize($conditions);
             }
         }
 
@@ -1571,7 +1647,7 @@ class Database
     protected function sanitize($value = null)
     {
         // Check if $value is not null or empty
-        if (!isset($value) || is_null($value) || is_integer($value) || $this->isSqlSubquery($value)) {
+        if (!isset($value) || is_null($value)) {
             return $value;
         }
 
@@ -1615,13 +1691,46 @@ class Database
      * @param string $table The table name.
      * @param array $data An associative array where keys represent column names and values represent corresponding data.
      * @return array The sanitized column data.
+     * @throws \Exception If there's an error accessing the database or if the table does not exist.
      */
     protected function sanitizeColumn($table, $data)
     {
-        // Get columns from table schema
-        $stmt = $this->pdo[$this->connectionName]->prepare("DESCRIBE $table");
-        $stmt->execute();
-        $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        // Get columns from table schema based on database driver
+        $driver = $this->connectionsSettings[$this->connectionName]['driver'];
+        switch ($this->driver) {
+            case 'mysql':
+                $sql = "DESCRIBE $table";
+                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
+                $stmt->execute();
+                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+                break;
+            case 'mssql':
+                $sql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ?";
+                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
+                $stmt->execute([$table]);
+                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+                break;
+            case 'oracle':
+                $sql = "SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = ?";
+                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
+                $stmt->execute([$table]);
+                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+                break;
+            case 'sqlite':
+                $sql = "PRAGMA table_info($table)";
+                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
+                $stmt->execute();
+                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN, 1);
+                break;
+            case 'firebird':
+                $sql = "SELECT RDB\$FIELD_NAME FROM RDB\$RELATION_FIELDS WHERE RDB\$RELATION_NAME = ?";
+                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
+                $stmt->execute([$table]);
+                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+                break;
+            default:
+                throw new \Exception("Unsupported database driver '{$this->driver}'", 500);
+        }
 
         // Filter $data array based on $columns_table
         $data = array_intersect_key($data, array_flip($columns_table));
@@ -1677,7 +1786,7 @@ class Database
             return preg_match($pattern, $value) === 1;
         }
 
-        return;
+        return false;
     }
 
     /**
@@ -1688,11 +1797,50 @@ class Database
      */
     protected function getPrimaryKeyColumn($table)
     {
-        // Query the information schema to get the primary key column
-        $sql = "SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE TABLE_NAME = :table
-            AND CONSTRAINT_NAME = 'PRIMARY'";
+        switch ($this->driver) {
+            case 'mysql':
+                // Query the information schema to get the primary key column
+                $sql = "SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                WHERE TABLE_NAME = :table
+                AND CONSTRAINT_NAME = 'PRIMARY'";
+                break;
+
+            case 'mssql':
+                // Query to get the primary key column name for MSSQL
+                $sql = "SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+                WHERE OBJECTPROPERTY(OBJECT_ID(CONSTRAINT_SCHEMA + '.' + CONSTRAINT_NAME), 'IsPrimaryKey') = 1 
+                AND TABLE_NAME = :table";
+                break;
+
+            case 'oracle':
+                // Query to get the primary key column name for Oracle
+                $sql = "SELECT cols.column_name
+                FROM all_constraints cons, all_cons_columns cols
+                WHERE cons.constraint_type = 'P'
+                AND cons.constraint_name = cols.constraint_name
+                AND cons.owner = cols.owner
+                AND cols.table_name = :table";
+                break;
+
+            case 'sqlite':
+                // Query to get the primary key column name for SQLite
+                $sql = "PRAGMA table_info($table)";
+                break;
+
+            case 'firebird':
+                // Query to get the primary key column name for Firebird
+                $sql = "SELECT TRIM(rdb\$index_segments.rdb\$field_name) AS column_name
+                FROM rdb\$indices
+                LEFT JOIN rdb\$index_segments ON rdb\$indices.rdb\$index_name = rdb\$index_segments.rdb\$index_name
+                WHERE rdb\$indices.rdb\$relation_name = :table
+                AND rdb\$indices.rdb\$unique_flag IS NOT NULL";
+                break;
+
+            default:
+                throw new \PDOException('Unsupported database driver', 404);
+        }
 
         // Prepare and execute the SQL statement
         $stmt = $this->pdo[$this->connectionName]->prepare($sql);
