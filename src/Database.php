@@ -28,7 +28,7 @@ class Database
     protected $pdo;
 
     /**
-     * @var string $driver The database driver being used (e.g., 'mysql', 'oracle', 'sqlite', etc.).
+     * @var string $driver The database driver being used (e.g., 'mysql', 'oracle', etc.).
      */
     protected $driver = 'mysql';
 
@@ -145,7 +145,7 @@ class Database
     /**
      * Constructor.
      *
-     * @param string $driver The database driver to be used (e.g., mysql, mssql, oracle, sqlite, firebird).
+     * @param string $driver The database driver to be used (e.g., mysql, mssql, oracle, firebird).
      * @param string|null $host The host of the database server.
      * @param string|null $username The username for the database connection.
      * @param string|null $password The password for the database connection.
@@ -156,7 +156,7 @@ class Database
      */
     public function __construct($driver = 'mysql', $host = null, $username = null, $password = null, $database = null, $port = null, $charset = 'utf8mb4', $socket = null)
     {
-        if (!in_array($driver, ['mysql', 'mssql', 'oracle', 'sqlite', 'firebird'])) {
+        if (!in_array($driver, ['mysql', 'mssql', 'oracle', 'firebird'])) {
             throw new \InvalidArgumentException("Invalid database driver '{$driver}' provided.");
         }
 
@@ -218,15 +218,12 @@ class Database
                     break;
                 case 'mssql':
                     $dsn = "sqlsrv:Server={$pro['host']};Database={$pro['db']}";
-                    if (isset($pro['port'])) {
+                    if (isset($pro['port']) && !empty($pro['port'])) {
                         $dsn .= ";port={$pro['port']}";
                     }
                     break;
                 case 'oracle':
                     $dsn = "oci:dbname={$pro['host']}/{$pro['db']}";
-                    break;
-                case 'sqlite':
-                    $dsn = "sqlite:{$pro['host']}";
                     break;
                 case 'firebird':
                     $dsn = "firebird:dbname={$pro['host']}";
@@ -250,7 +247,7 @@ class Database
             $this->pdo[$connectionName] = $pdo;
         } catch (\PDOException $e) {
             $this->_error = ['code' => (int) $e->getCode(), 'message' => 'Error connection: ' . $e->getMessage()];
-            throw new \Exception('Connect Error: ' . $e->getCode() . ': ' . $e->getMessage(), $e->getCode());
+            throw new \Exception('Connect Error: ' . (int) $e->getCode() . ': ' . $e->getMessage(), (int) $e->getCode());
         }
     }
 
@@ -686,9 +683,6 @@ class Database
                 case 'firebird':
                     $query = "SELECT RDB\$RELATION_NAME FROM RDB\$RELATIONS WHERE RDB\$RELATION_NAME = '$table'";
                     break;
-                case 'sqlite':
-                    $query = "SELECT name FROM sqlite_master WHERE type='table' AND name='$table'";
-                    break;
                 default:
                     throw new \Exception("Unsupported database driver '{$this->driver}'", 500);
             }
@@ -763,7 +757,11 @@ class Database
      */
     public function limit($limit)
     {
-        if (!is_int($limit)) {
+        // Try to cast the input to an integer
+        $limit = filter_var($limit, FILTER_VALIDATE_INT);
+
+        // Check if the input is not an integer after casting
+        if ($limit === false) {
             throw new \InvalidArgumentException('Limit must be an integer.');
         }
 
@@ -1027,7 +1025,19 @@ class Database
 
         try {
             // Create a separate query to get total count
-            $sqlTotal = 'SELECT COUNT(*) count ' . substr($query['sql'], strpos($query['sql'], 'FROM'));
+            switch ($this->driver) {
+                case 'mysql':
+                    $sqlTotal = 'SELECT COUNT(*) count ' . substr($query['sql'], strpos($query['sql'], 'FROM'));
+                    break;
+                case 'mssql':
+                    $sqlTotal = 'SELECT COUNT(*) count FROM (' . $query['sql'] . ') AS subquery';
+                    break;
+                case 'oracle':
+                    $sqlTotal = 'SELECT COUNT(*) count FROM (' . $query['sql'] . ')';
+                    break;
+                default:
+                    throw new \Exception('Unsupported database driver for paginate()');
+            }
 
             // Execute the total count query
             $stmtTotal = $this->pdo[$this->connectionName]->prepare($sqlTotal);
@@ -1041,7 +1051,19 @@ class Database
             $totalPages = ceil($total / $limit);
 
             // Add LIMIT and OFFSET clauses to the main query
-            $query['sql'] .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+            switch ($this->driver) {
+                case 'mysql':
+                    $query['sql'] .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+                    break;
+                case 'mssql':
+                    $query['sql'] = "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS RowNum FROM (" . $query['sql'] . ") AS innerQuery) AS outerQuery WHERE RowNum BETWEEN $offset + 1 AND $offset + $limit";
+                    break;
+                case 'oracle':
+                    $query['sql'] = 'SELECT * FROM (SELECT innerQuery.*, ROWNUM AS rn FROM (' . $query['sql'] . ') innerQuery WHERE ROWNUM <= ' . ($offset + $limit) . ') WHERE rn > ' . $offset;
+                    break;
+                default:
+                    throw new \Exception('Unsupported database driver for paginate()');
+            }
 
             // Execute the main query
             $stmt = $this->pdo[$this->connectionName]->prepare($query['sql']);
@@ -1444,7 +1466,11 @@ class Database
 
         // LIMIT clause
         if (!empty($this->limit)) {
-            $sql .= ' LIMIT ' . $this->limit;
+            if ($this->driver == 'mssql') {
+                $sql = preg_replace('/^\s*SELECT\s/i', 'SELECT TOP ' . intval($this->limit) . ' ', $sql);
+            } else {
+                $sql .= ' LIMIT ' . $this->limit;
+            }
         }
 
         return ['sql' => $sql, 'bindings' => $bindings];
@@ -1716,12 +1742,6 @@ class Database
                 $stmt->execute([$table]);
                 $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
                 break;
-            case 'sqlite':
-                $sql = "PRAGMA table_info($table)";
-                $stmt = $this->pdo[$this->connectionName]->prepare($sql);
-                $stmt->execute();
-                $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN, 1);
-                break;
             case 'firebird':
                 $sql = "SELECT RDB\$FIELD_NAME FROM RDB\$RELATION_FIELDS WHERE RDB\$RELATION_NAME = ?";
                 $stmt = $this->pdo[$this->connectionName]->prepare($sql);
@@ -1822,11 +1842,6 @@ class Database
                 AND cons.constraint_name = cols.constraint_name
                 AND cons.owner = cols.owner
                 AND cols.table_name = :table";
-                break;
-
-            case 'sqlite':
-                // Query to get the primary key column name for SQLite
-                $sql = "PRAGMA table_info($table)";
                 break;
 
             case 'firebird':
