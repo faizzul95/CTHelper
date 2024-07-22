@@ -110,6 +110,10 @@ abstract class BaseDatabase implements ConnectionInterface, PrepareStatementInte
      */
     protected $_binds = [];
 
+    /**
+     * @var string The return type for return result.
+     */
+    protected $returnType = 'array';
 
     public function initialize(array $config)
     {

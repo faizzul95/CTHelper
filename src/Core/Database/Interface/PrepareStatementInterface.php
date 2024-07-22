@@ -40,7 +40,7 @@ interface PrepareStatementInterface
      *                        Possible values: 'get' to fetch a single row, 'all' to fetch all rows.
      * @return mixed The result of the query execution, depending on the database driver.
      */
-    public function rawQuery(string $query, array $binds = [], ?string $fetch = 'get');
+    public function rawQuery(string $query, array $binds = [], string $fetch = 'get');
 
     /**
      * Specifies the table to perform the query on.
@@ -66,7 +66,7 @@ interface PrepareStatementInterface
      * @param string $whereType The type of where clause ('AND' or 'OR').
      * @return $this
      */
-    public function whereRaw($rawQuery, $binds = [], $whereType = 'AND');
+    public function whereRaw(string $rawQuery, array $binds = [], string $whereType = 'AND');
 
     /**
      * Adds a where clause to the query.
@@ -76,17 +76,17 @@ interface PrepareStatementInterface
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function where($column = null, $value = null, $operator = '=');
+    public function where(string $column = null, ?string $value = null, string $operator = '=');
 
     /**
      * Adds an OR where clause to the query.
      *
-     * @param string|null $column The column name.
+     * @param string $column The column name.
      * @param mixed $value The value to compare.
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function orWhere($column = null, $value = null, $operator = '=');
+    public function orWhere(string $column = null, ?string $value = null, string $operator = '=');
 
     /**
      * Adds a whereIn clause to the query.
@@ -95,7 +95,7 @@ interface PrepareStatementInterface
      * @param array $value The array of values to compare.
      * @return $this
      */
-    public function whereIn($column, $value = []);
+    public function whereIn(string $column, array $value = []);
 
     /**
      * Adds an OR whereIn clause to the query.
@@ -104,7 +104,7 @@ interface PrepareStatementInterface
      * @param array $value The array of values to compare.
      * @return $this
      */
-    public function orWhereIn($column, $value = []);
+    public function orWhereIn(string $column, array $value = []);
 
     /**
      * Adds a whereNotIn clause to the query.
@@ -113,7 +113,7 @@ interface PrepareStatementInterface
      * @param array $value The array of values to compare.
      * @return $this
      */
-    public function whereNotIn($column, $value = []);
+    public function whereNotIn(string $column, $value = []);
 
     /**
      * Adds an OR whereNotIn clause to the query.
@@ -122,7 +122,7 @@ interface PrepareStatementInterface
      * @param array $value The array of values to compare.
      * @return $this
      */
-    public function orWhereNotIn($column, $value = []);
+    public function orWhereNotIn(string $column, array $value = []);
 
     /**
      * Adds a whereBetween clause to the query.
@@ -132,7 +132,7 @@ interface PrepareStatementInterface
      * @param mixed $end The end value.
      * @return $this
      */
-    public function whereBetween($column, $start, $end);
+    public function whereBetween(string $column, string $start, string $end);
 
     /**
      * Adds an OR whereBetween clause to the query.
@@ -142,7 +142,7 @@ interface PrepareStatementInterface
      * @param mixed $end The end value.
      * @return $this
      */
-    public function orWhereBetween($column, $start, $end);
+    public function orWhereBetween(string $column, string $start, string $end);
 
     /**
      * Adds a whereNotBetween clause to the query.
@@ -152,7 +152,7 @@ interface PrepareStatementInterface
      * @param mixed $end The end value.
      * @return $this
      */
-    public function whereNotBetween($column, $start, $end);
+    public function whereNotBetween(string $column, string $start, string $end);
 
     /**
      * Adds an OR whereNotBetween clause to the query.
@@ -162,7 +162,7 @@ interface PrepareStatementInterface
      * @param mixed $end The end value.
      * @return $this
      */
-    public function orWhereNotBetween($column, $start, $end);
+    public function orWhereNotBetween(string $column, string $start, string $end);
 
     /**
      * Adds a whereNull clause to the query.
@@ -170,7 +170,7 @@ interface PrepareStatementInterface
      * @param string $column The column name.
      * @return $this
      */
-    public function whereNull($colum);
+    public function whereNull(string $column);
 
     /**
      * Adds an OR whereNull clause to the query.
@@ -178,7 +178,7 @@ interface PrepareStatementInterface
      * @param string $column The column name.
      * @return $this
      */
-    public function orWhereNull($column);
+    public function orWhereNull(string $column);
 
     /**
      * Adds a whereNotNull clause to the query.
@@ -186,7 +186,7 @@ interface PrepareStatementInterface
      * @param string $column The column name.
      * @return $this
      */
-    public function whereNotNull($column);
+    public function whereNotNull(string $column);
 
     /**
      * Adds an OR whereNotNull clause to the query.
@@ -194,7 +194,7 @@ interface PrepareStatementInterface
      * @param string $column The column name.
      * @return $this
      */
-    public function orWhereNotNull($column);
+    public function orWhereNotNull(string $column);
 
     /**
      * Adds a whereDate clause to the query.
@@ -204,17 +204,17 @@ interface PrepareStatementInterface
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function whereDate($column, $date, $operator = '=');
+    public function whereDate(string $column, string $date, string $operator = '=');
 
     /**
-     * Adds a whereDate clause to the query.
+     * Adds a OR whereDate clause to the query.
      *
      * @param string $column The column name.
      * @param mixed $date The date to compare.
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function orWhereDate($column, $date, $operator = '=');
+    public function orWhereDate(string $column, string $date, string $operator = '=');
 
     /**
      * Adds a whereDay clause to the query.
@@ -224,17 +224,17 @@ interface PrepareStatementInterface
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function whereDay($column, $date, $operator = '=');
+    public function whereDay(string $column, string $date, string $operator = '=');
 
     /**
-     * Adds a whereDay clause to the query.
+     * Adds a OR whereDay clause to the query.
      *
      * @param string $column The column name.
      * @param mixed $date The day to compare.
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function orWhereDay($column, $date, $operator = '=');
+    public function orWhereDay(string $column, string $date, string $operator = '=');
 
     /**
      * Adds a whereYear clause to the query.
@@ -244,20 +244,20 @@ interface PrepareStatementInterface
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function whereYear($column, $date, $operator = '=');
+    public function whereYear(string $column, string $date, string $operator = '=');
 
     /**
-     * Adds a whereYear clause to the query.
+     * Adds a OR whereYear clause to the query.
      *
      * @param string $column The column name.
      * @param mixed $date The year to compare.
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function orWhereYear($column, $date, $operator = '=');
+    public function orWhereYear(string $column, string $date, string $operator = '=');
 
     /**
-     * Adds a join raw clause to the query.
+     * Adds a raw join clause to the query.
      *
      * @param string $table The table to join.
      * @param string|null $conditions Conditions include key & other extra condition for the join.
@@ -296,7 +296,7 @@ interface PrepareStatementInterface
      * @param string|null $conditions Additional conditions for the join.
      * @return $this
      */
-    public function innerJoin($table, $foreignKey, $localKey, $conditions = null);
+    public function innerJoin(string $table, string $foreignKey, string $localKey, ?string $conditions = null);
 
     /**
      * Adds an outer join clause to the query.
@@ -307,7 +307,7 @@ interface PrepareStatementInterface
      * @param string|null $conditions Additional conditions for the join.
      * @return $this
      */
-    public function outerJoin($table, $foreignKey, $localKey, $conditions = null);
+    public function outerJoin(string $table, string $foreignKey, string $localKey, ?string $conditions = null);
 
     /**
      * Adds an order by clause to the query.
@@ -316,7 +316,7 @@ interface PrepareStatementInterface
      * @param string $direction The direction of the order ('ASC' or 'DESC').
      * @return $this
      */
-    public function orderBy($column, $direction = 'ASC');
+    public function orderBy(string $column, string $direction = 'ASC');
 
     /**
      * Adds a raw order by clause to the query.
@@ -325,7 +325,7 @@ interface PrepareStatementInterface
      * @param array|null $bindParams Parameters to bind to the raw order by string.
      * @return $this
      */
-    public function orderByRaw($string, $bindParams = null);
+    public function orderByRaw(string $string, string $bindParams = null);
 
     /**
      * Adds a group by clause to the query.
@@ -343,7 +343,7 @@ interface PrepareStatementInterface
      * @param string $operator The comparison operator, default is '='.
      * @return $this
      */
-    public function having($column, $value, $operator = '=');
+    public function having(string $column, ?string $value, string $operator = '=');
 
     /**
      * Adds a limit clause to the query.
@@ -351,7 +351,7 @@ interface PrepareStatementInterface
      * @param int $limit The number of rows to return.
      * @return $this
      */
-    public function limit($limit);
+    public function limit(int $limit);
 
     /**
      * Adds an offset clause to the query.
@@ -359,7 +359,7 @@ interface PrepareStatementInterface
      * @param int $offset The number of rows to skip.
      * @return $this
      */
-    public function offset($offset);
+    public function offset(int $offset);
 
     /**
      * Executes the query and returns the results.
@@ -403,7 +403,7 @@ interface PrepareStatementInterface
      * @param callable $callback The callback function to apply to each chunk.
      * @return mixed The result of processing the chunks.
      */
-    public function chunk($size, callable $callback);
+    public function chunk(int $size, callable $callback);
 
     /**
      * Paginates the result set.
@@ -413,7 +413,7 @@ interface PrepareStatementInterface
      * @param int $draw The draw counter for pagination.
      * @return mixed The paginated result set.
      */
-    public function paginate($currentPage = 1, $limit = 10, $draw = 1);
+    public function paginate(int $currentPage = 1, int $limit = 10, int $draw = 1);
 
     /**
      * Specifies a relationship to load with the query.
@@ -425,7 +425,7 @@ interface PrepareStatementInterface
      * @param \Closure|null $callback A callback function to apply to the relationship.
      * @return $this
      */
-    public function with($aliasKey, $table, $foreignKey, $localKey, \Closure $callback = null);
+    public function with(string $aliasKey, string $table, string $foreignKey, string $localKey, \Closure $callback = null);
 
     /**
      * Specifies a one-to-one relationship to load with the query.
@@ -437,5 +437,35 @@ interface PrepareStatementInterface
      * @param \Closure|null $callback A callback function to apply to the relationship.
      * @return $this
      */
-    public function withOne($aliasKey, $table, $foreignKey, $localKey, \Closure $callback = null);
+    public function withOne(string $aliasKey, string $table, string $foreignKey, string $localKey, \Closure $callback = null);
+
+    /**
+     * Builds a WHERE clause fragment based on provided conditions.
+     *
+     * This function is used internally to construct WHERE clause parts based on
+     * column name, operator, value(s), and WHERE type (AND or OR). It handles
+     * different operators like `=`, `IN`, `NOT IN`, `BETWEEN`, and `NOT BETWEEN`.
+     * It uses placeholders (`?`) for values and builds the appropriate clause structure.
+     * This function also merges the provided values into the internal `_binds` array
+     * for later binding to the prepared statement.
+     *
+     * @param string $columnName The name of the column to compare.
+     * @param mixed $value The value or an array of values for the comparison.
+     * @param string $operator (optional) The comparison operator (e.g., =, IN, BETWEEN). Defaults to =.
+     * @param string $whereType (optional) The type of WHERE clause (AND or OR). Defaults to AND.
+     * @throws \InvalidArgumentException If invalid operator or value format is provided.
+     */
+    public function _buildWhereClause(string $columnName, ?string $value = null, string $operator = '=', string $whereType = 'AND');
+
+     /**
+     * Builds the final SELECT query string based on the configured options.
+     *
+     * This function combines all the query components like selected fields, table,
+     * joins, WHERE clause, GROUP BY, ORDER BY, and LIMIT into a single SQL query string.
+     *
+     * @return $this This object for method chaining.
+     * @throws \InvalidArgumentException If an asterisk (*) is used in the select clause
+     *                                   and no table is specified.
+     */
+    public function _buildPrepareSelectQuery();
 }

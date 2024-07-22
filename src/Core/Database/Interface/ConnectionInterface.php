@@ -63,7 +63,7 @@ interface ConnectionInterface
     public function getDatabase();
 
     /**
-     * The name of the platform in use (MySQL, MSSQL, NariaDB, OCI)
+     * The name of the platform in use (MySQL, MSSQL, MariaDB, OCI)
      */
     public function getPlatform();
 
