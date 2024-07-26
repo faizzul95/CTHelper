@@ -46,7 +46,7 @@ abstract class BaseDatabase implements ConnectionInterface, PrepareStatementInte
     protected $schema;
 
     /**
-     * @var string|null The table name.
+     * @var string The table name.
      */
     protected $table;
 
@@ -115,6 +115,9 @@ abstract class BaseDatabase implements ConnectionInterface, PrepareStatementInte
      */
     protected $returnType = 'array';
 
+
+    // Implement ConnectionIntrface
+
     public function initialize(array $config)
     {
         $this->config = $config;
@@ -123,6 +126,7 @@ abstract class BaseDatabase implements ConnectionInterface, PrepareStatementInte
     public function connect()
     {
         // Each driver will implement its own connection logic
+        return $this;
     }
 
     public function setConnection($connectionID)
@@ -168,6 +172,81 @@ abstract class BaseDatabase implements ConnectionInterface, PrepareStatementInte
             return $this->pdo[$this->connectionID]->getAttribute(\PDO::ATTR_SERVER_VERSION);
         } else {
             return 'Unknown';  // Handle cases where no database connection exists
+        }
+    }
+
+    // Implement PrepareStatementInterface logic
+
+    public function resetStatement() {
+        $this->driver = 'mysql';
+        $this->connectionID = 'default';
+        $this->table = null;
+        $this->fields = '*';
+        $this->limit = null;
+        $this->offset = null;
+        $this->orderBy = null;
+        $this->groupBy = null;
+        $this->where = null;
+        $this->joins = null;
+        $this->_error = [];
+        $this->_secureInput = false;
+        $this->_binds = [];
+        $this->_query = [];
+        $this->relations = [];
+        return $this;
+    }
+
+
+
+
+
+
+
+
+
+    // Implement ResultInterface
+
+    public function toArray()
+    {
+        $this->returnType = 'array';
+        return $this;
+    }
+
+    public function toObject()
+    {
+        $this->returnType = 'object';
+        return $this;
+    }
+
+    public function toJson()
+    {
+        $this->returnType = 'json';
+        return $this;
+    }
+
+    # HELPER
+
+    // 1) Convert result based on $returnType
+
+    /**
+     * Converts the result data to the specified return type.
+     *
+     * @param mixed $data The data to be converted.
+     * @return mixed The converted data.
+    */
+    protected function _returnResult($data)
+    {
+        if(empty($data))
+            return $data;
+
+        switch ($this->returnType) {
+            case 'object':
+                return json_decode(json_encode($data));
+            case 'json':
+                return json_encode($data);
+            case 'array':
+            default:
+                return $data;
         }
     }
 }
