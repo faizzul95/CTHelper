@@ -17,6 +17,18 @@ class Database
 {
     protected $db;
 
+    /**
+     * @var array The list of database support.
+     */
+    protected $listDatabasePlatSupport = [
+        'mysql' => 'MySQL',
+        'mssql' => 'MSSQL',
+        'oci' => 'Oci',
+        'mariadb' => 'MariaDB',
+        'fdb' => 'Firebird',
+        '-' => 'Unknown'
+    ];
+
     public function __construct(string $connectionID = 'default', array $config)
     {
         if (empty($config)) {
@@ -25,19 +37,11 @@ class Database
 
         $dbPlatform = isset($config['driver']) ? strtolower($config['driver']) : '-';
 
-        $mapPlatform = [
-            'mysql' => 'MySQL',
-            'mssql' => 'MSSQL',
-            'oci' => 'Oci',
-            'mariadb' => 'MariaDB',
-            'fdb' => 'Firebird'
-        ];
-
-        if (!isset($mapPlatform[$dbPlatform])) {
+        if (!isset($this->listDatabasePlatSupport[$dbPlatform])) {
             throw new \InvalidArgumentException("Unsupported database driver: {$dbPlatform}");
         }
 
-        $driverClass = "Core\\Drivers\\" . $mapPlatform[$dbPlatform] . "Driver";
+        $driverClass = "Core\\Drivers\\" . $this->listDatabasePlatSupport[$dbPlatform] . "Driver";
         $this->db = new $driverClass;
         $this->db->setConnection($connectionID);
         $this->db->initialize($config);

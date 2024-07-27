@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Core\Database\Interface;
 
 /**
- * Crud Interface
+ * Builder Crud Interface
  *
  * This interface defines methods for performing CRUD operations.
  * It provides methods for inserting, updating, deleting, and batch processing
@@ -16,7 +16,7 @@ namespace Core\Database\Interface;
  * @license http://opensource.org/licenses/gpl-3.0.html GNU Public License
  * @version 0.0.1
  */
-interface CrudInterface
+interface BuilderCrudInterface
 {
     /**
      * Inserts a new record into the database.

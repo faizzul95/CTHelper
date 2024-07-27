@@ -1,6 +1,6 @@
 <?php
 
-namespace Core;
+namespace Core\Database;
 
 /**
  * Cache Class
@@ -8,14 +8,14 @@ namespace Core;
  * This class handles caching functionality.
  *
  * @category  Cache
- * @package   Cache
+ * @package   Core\Database
  * @author    Mohd Fahmy Izwan Zulkhafri <faizzul14@gmail.com>
  * @license   http://opensource.org/licenses/gpl-3.0.html GNU Public License
  * @link      -
- * @version   0.1.0
+ * @version   0.0.1
  */
 
-class Cache
+class DatabaseCache
 {
     /**
      * @var string The path

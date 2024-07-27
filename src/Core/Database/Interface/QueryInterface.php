@@ -1,0 +1,88 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Core\Database\Interface;
+
+/**
+ * Database Query Interface
+ *
+ * This interface defines methods for building and executing database queries.
+ * It provides a consistent way to interact with different database drivers 
+ * while allowing for driver-specific implementations.
+ *
+ * @category Database
+ * @package Core\Database
+ * @author 
+ * @license http://opensource.org/licenses/gpl-3.0.html GNU Public License
+ * @link 
+ * @version 0.0.1
+ */
+
+interface QueryInterface
+{
+    /**
+     * Executes a raw SQL query without any parameter binding.
+     * 
+     * This method should be used sparingly and only for queries that cannot 
+     * be built using the provided methods. It's generally recommended to 
+     * use prepared statements like 'bindQuery' with parameter binding for security reasons.
+     *
+     * @param string $query The raw SQL query to execute.
+     * @return mixed The result of the query execution, depending on the database driver.
+     */
+    public function simpleQuery(string $query);
+
+    /**
+     * Executes a raw SQL query with optional parameter binding.
+     *
+     * Use this method with caution for statements that are not covered
+     * by the other specialized methods. It allows binding parameters to the query
+     * for improved security and performance.
+     *
+     * @param string $query The raw SQL query to execute.
+     * @param array $binds An associative array of parameter names (placeholders) and their corresponding values.
+     * @return mixed The result of the query execution, depending on the database driver.
+     */
+    public function bindQuery(string $query, array $binds = []);
+
+    /**
+     * Executes the query and returns the results.
+     *
+     * @return mixed The result of the query execution, depending on the database driver.
+     */
+    public function get();
+
+    /**
+     * Fetches a single row from the result set.
+     *
+     * @return mixed The first row of the result set.
+     */
+    public function fetch();
+
+    /**
+     * Counts the number of rows in the result set.
+     *
+     * @return int The number of rows in the result set.
+     */
+    public function count();
+
+    /**
+     * Processes the query in chunks and applies a callback function to each chunk.
+     *
+     * @param int $size The size of each chunk.
+     * @param callable $callback The callback function to apply to each chunk.
+     * @return mixed The result of processing the chunks.
+     */
+    public function chunk($size, callable $callback);
+
+    /**
+     * Paginates the result set.
+     *
+     * @param int $currentPage The current page number.
+     * @param int $limit The number of rows per page.
+     * @param int $draw The draw counter for pagination.
+     * @return mixed The paginated result set.
+     */
+    public function paginate($currentPage = 1, $limit = 10, $draw = 1);
+}
