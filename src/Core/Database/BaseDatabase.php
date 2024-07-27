@@ -10,7 +10,7 @@ namespace Core\Database;
  * @author    Mohd Fahmy Izwan Zulkhafri <faizzul14@gmail.com>
  * @license   http://opensource.org/licenses/gpl-3.0.html GNU Public License
  * @link      -
- * @version   0.1.35
+ * @version   0.0.1
  */
 
 use PDO;
@@ -1284,7 +1284,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $whereType (optional) The type of WHERE clause (AND or OR). Defaults to AND.
      * @throws \InvalidArgumentException If invalid operator or value format is provided.
      */
-    private function _buildWhereClause($columnName, $value = null, $operator = '=', $whereType = 'AND')
+    protected function _buildWhereClause($columnName, $value = null, $operator = '=', $whereType = 'AND')
     {
         if (!isset($this->where)) {
             $this->where = "";
@@ -1343,7 +1343,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @throws \InvalidArgumentException If an asterisk (*) is used in the select clause
      *                                   and no table is specified.
      */
-    private function _buildSelectQuery()
+    protected function _buildSelectQuery()
     {
         // Build the basic SELECT clause with fields
         $this->_query = "SELECT " . ($this->column === '*' ? '*' : $this->column) . " FROM ";
@@ -1863,11 +1863,10 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      *
      * @param array $data The associative array containing the data to be inserted. Keys represent column names, and values represent the data for those columns.
      *
-     * @access private
      *
      * @return $this This object instance (used for method chaining).
      */
-    private function _buildInsertQuery($data)
+    protected function _buildInsertQuery($data)
     {
         // Check if data is empty or not an associative array (key-value pairs)
         if (empty($data) || !is_array($data)) {
@@ -1973,7 +1972,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @throws InvalidArgumentException If the provided data is empty, not an array, or not an associative array with column names as keys.
      * @return object $this The current object instance for chaining methods.
      */
-    private function _buildUpdateQuery($data)
+    protected function _buildUpdateQuery($data)
     {
         // Check if data is empty or not an associative array (key-value pairs)
         if (empty($data) || !is_array($data)) {
@@ -2086,7 +2085,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string|array $conditions Optional. The condition(s) to specify which rows to delete.
      * @return string|null The generated SQL DELETE statement or null if $condition is not valid.
      */
-    private function _buildDeleteQuery()
+    protected function _buildDeleteQuery()
     {
         // Construct the SQL delete statement
         $this->_query = "DELETE FROM ";
@@ -2319,10 +2318,10 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $connectionName The database connection name.
      * @param string $typeFetch The fetch type ('fetch' or 'get').
      */
-    private function _processEagerLoading(&$data, $relations, $connectionName, $typeFetch)
+    protected function _processEagerLoading(&$data, $relations, $connectionName, $typeFetch)
     {
         $data = $typeFetch == 'fetch' ? [$data] : $data;
-        $connectionObj = Database::$_instance->connection($connectionName);
+        $connectionObj = $this->getInstance()->connection($connectionName);
 
         foreach ($relations as $alias => $eager) {
 
@@ -2371,9 +2370,9 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $alias The alias for the relationship.
      * @param Closure|null $callback An optional callback to customize the query.
      */
-    private function _processEagerLoadingInBatches(&$data, $primaryKeys, $table, $fk_id, $pk_id, $connectionName, $method, $alias, \Closure $callback = null)
+    protected function _processEagerLoadingInBatches(&$data, $primaryKeys, $table, $fk_id, $pk_id, $connectionName, $method, $alias, \Closure $callback = null)
     {
-        $connectionObj = Database::$_instance->connection($connectionName);
+        $connectionObj = $this->getInstance()->connection($connectionName);
 
         $chunks = array_chunk($primaryKeys, $this->_parallelBatchSize);
 
@@ -2411,7 +2410,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $fk_id The foreign key column in the related table.
      * @return array The related records fetched for the chunk.
      */
-    private function _processEagerByChunk($chunk, \Closure $callback = null, $connectionObj, $table, $fk_id)
+    protected function _processEagerByChunk($chunk, \Closure $callback = null, $connectionObj, $table, $fk_id)
     {
         $relatedRecordsQuery = $connectionObj->table($table)->whereIn($fk_id, $chunk);
 
@@ -2435,7 +2434,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $fk_id The foreign key column in the related table.
      * @param string $pk_id The local key column in the current table.
      */
-    private function attachEagerLoadedData($method, &$data, &$relatedRecords, $alias, $fk_id, $pk_id)
+    protected function attachEagerLoadedData($method, &$data, &$relatedRecords, $alias, $fk_id, $pk_id)
     {
         // Organize related records by foreign key using an associative array
         $relatedMap = [];
@@ -2483,7 +2482,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @return string The currently active profiler identifier.
      *
      */
-    private function _setProfilerIdentifier($identifier = 'main')
+    protected function _setProfilerIdentifier($identifier = 'main')
     {
         $this->_profilerActive = $identifier;
         return $this;
@@ -2497,7 +2496,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      *
      * @param string $method The name of the method that initiated profiling.
      */
-    private function _startProfiler($method)
+    protected function _startProfiler($method)
     {
         $startTime = microtime(true);
 
@@ -2550,7 +2549,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * It also updates the profiler data with end time, formatted end time, execution time, and status.
      * 
      */
-    private function _stopProfiler()
+    protected function _stopProfiler()
     {
         if (!isset($this->_profiler['profiling'][$this->_profilerActive])) {
             return;  // Profiler not started
@@ -2672,7 +2671,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $key The unique key identifying the cached data.
      * @return mixed|null Returns the cached data if found; otherwise, returns null.
      */
-    private function _getCacheData($key)
+    protected function _getCacheData($key)
     {
         $cache = new DatabaseCache();
         return $cache->get($key);
@@ -2688,7 +2687,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param int $expire The expiration time of the cache entry in seconds (default: 1800 seconds).
      * @return bool Returns true on success, false on failure.
      */
-    private function _setCacheData($key, $data, $expire = 1800)
+    protected function _setCacheData($key, $data, $expire = 1800)
     {
         $cache = new DatabaseCache();
         return $cache->set($key, $data, $expire);
@@ -2705,7 +2704,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $message (Optional) The exception message to throw (defaults to "Not supported to run full query").
      * @throws \InvalidArgumentException If the string contains forbidden keywords.
      */
-    private function _forbidRawQuery($string, $message = 'Not supported to run full query')
+    protected function _forbidRawQuery($string, $message = 'Not supported to run full query')
     {
         $stringArr = is_string($string) ? [$string] : $string;
 
@@ -2731,7 +2730,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @throws \PDOException If positional parameters use non-numeric keys or the query
      *                       format is invalid for placeholders.
      */
-    private function _bindParams(\PDOStatement $stmt, array $binds)
+    protected function _bindParams(\PDOStatement $stmt, array $binds)
     {
         $query = $stmt->queryString;
 
@@ -2786,7 +2785,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      *                       format is invalid for placeholders.
      * @return $this This object for method chaining.
      */
-    private function _generateFullQuery($query, $binds = null)
+    protected function _generateFullQuery($query, $binds = null)
     {
         if (!empty($binds)) {
             // Check if positional or named parameters are used
@@ -2829,7 +2828,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $query The SQL query string.
      * @return string The modified query string with expanded columns.
      */
-    private function _expandAsterisksInQuery($query)
+    protected function _expandAsterisksInQuery($query)
     {
         // Scenario 1: SELECT * FROM table
         if (preg_match('/SELECT\s+\*\s+FROM\s+([\w]+)/i', $query, $matches)) {
@@ -2877,7 +2876,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param string $customMessage (optional) The description of error.
      * @throws \Exception A new exception with details from the database error.
      */
-    private function db_error_log(\Exception $e, $function = '', $customMessage = 'Error executing')
+    protected function db_error_log(\Exception $e, $function = '', $customMessage = 'Error executing')
     {
         try {
             // Log the error message and code
@@ -2906,7 +2905,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
      * @param int $precision (optional) The number of decimal places to round to. Defaults to 2.
      * @return string The formatted string with units (e.g., 1023.45 KB).
      */
-    private function _formatBytes($bytes, $precision = 2)
+    protected function _formatBytes($bytes, $precision = 2)
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
