@@ -22,9 +22,8 @@ use Core\Database\Interface\BuilderStatementInterface;
 
 use Core\Database\Interface\QueryInterface;
 use Core\Database\Interface\ResultInterface;
-use Core\Database\DatabaseCache;
 
-abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInterface, QueryInterface, BuilderCrudInterface, ResultInterface
+abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterface, BuilderStatementInterface, QueryInterface, BuilderCrudInterface, ResultInterface
 {
     /**
      * Static instance of self
@@ -220,11 +219,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
         self::$_instance = $this;
     }
 
-    // Override function logic based on driver
-    public function connect($connectionName = 'default')
-    {
-        return $this;
-    }
+    abstract public function connect($connectionName = 'default');
 
     public function setConnection($connectionID)
     {
@@ -325,9 +320,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereRaw($rawQuery, $value = [], $whereType = 'AND')
     {
         try {
-            if (!is_string($rawQuery)) {
-                throw new \InvalidArgumentException('Invalid query format. Must be a string');
-            }
+            $this->validateColumn($rawQuery, 'query');
 
             if (!empty($value) && !is_array($value)) {
                 throw new \InvalidArgumentException("Value for " . __FUNCTION__ . " must be an array");
@@ -357,11 +350,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
                 throw new \InvalidArgumentException('Invalid column name. Must be a string or an associative array.');
             }
 
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!=', 'LIKE'];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
+            $this->validateOperator($operator, ['LIKE', 'NOT LIKE']);
 
             if (is_callable($columnName)) {
                 $db = clone $this; // Clone current query builder instance
@@ -386,9 +375,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
 
             if (is_array($columnName)) {
                 foreach ($columnName as $column => $val) {
-                    if (!is_string($column)) {
-                        throw new \InvalidArgumentException('Invalid column name in array. Must be a string.');
-                    }
+                    $this->validateColumn($column);
                     $this->_buildWhereClause($column, $val, $operator, 'AND');
                 }
             } else {
@@ -409,11 +396,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
                 throw new \InvalidArgumentException('Invalid column name. Must be a string or an associative array.');
             }
 
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!=', 'LIKE'];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
+            $this->validateOperator($operator, ['LIKE', 'NOT LIKE']);
 
             if (is_callable($columnName)) {
                 $db = clone $this; // Clone current query builder instance
@@ -456,10 +439,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereIn($column, $value = [])
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             if (!is_array($value)) {
                 throw new \InvalidArgumentException("Value for 'IN' operator must be an array");
@@ -478,10 +458,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereIn($column, $value = [])
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             if (!is_array($value)) {
                 throw new \InvalidArgumentException("Value for 'IN' operator must be an array");
@@ -500,10 +477,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereNotIn($column, $value = [])
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             if (!is_array($value)) {
                 throw new \InvalidArgumentException("Value for 'NOT IN' operator must be an array");
@@ -522,10 +496,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereNotIn($column, $value = [])
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             if (!is_array($value)) {
                 throw new \InvalidArgumentException("Value for 'NOT IN' operator must be an array");
@@ -544,10 +515,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereBetween($columnName, $start, $end)
     {
         try {
-            // Validate column name type
-            if (!is_string($columnName)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($columnName);
 
             // Validate and format start and end values
             $formattedValues = [];
@@ -585,10 +553,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereBetween($columnName, $start, $end)
     {
         try {
-            // Validate column name type
-            if (!is_string($columnName)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($columnName);
 
             // Validate and format start and end values
             $formattedValues = [];
@@ -626,10 +591,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereNotBetween($columnName, $start, $end)
     {
         try {
-
-            if (!is_string($columnName)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($columnName);
 
             $formattedValues = [];
             foreach ([$start, $end] as $value) {
@@ -665,10 +627,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereNotBetween($columnName, $start, $end)
     {
         try {
-
-            if (!is_string($columnName)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($columnName);
 
             $formattedValues = [];
             foreach ([$start, $end] as $value) {
@@ -694,7 +653,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($columnName, 'Full/Sub SQL statements are not allowed in orWhereNotBetween(). Please use simpleQuery() function.');
 
-            $this->_buildWhereClause($columnName, $formattedValues, 'NOT BETWEEN', 'AND');
+            $this->_buildWhereClause($columnName, $formattedValues, 'NOT BETWEEN', 'OR');
             return $this;
         } catch (\InvalidArgumentException $e) {
             $this->db_error_log($e, __FUNCTION__);
@@ -704,10 +663,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereNull($column)
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereNull(). Please use simpleQuery() function.');
@@ -722,10 +678,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereNull($column)
     {
         try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereNull(). Please use simpleQuery() function.');
@@ -740,11 +693,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function whereNotNull($column)
     {
         try {
-
-            // Validate column name type
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereNotNull(). Please use simpleQuery() function.');
@@ -759,11 +708,7 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     public function orWhereNotNull($column)
     {
         try {
-
-            // Validate column name type
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
+            $this->validateColumn($column);
 
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereNotNull(). Please use simpleQuery() function.');
@@ -775,274 +720,31 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
         }
     }
 
-    // Override function logic based on driver
-    public function whereDate($column, $date, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            // Check if date is valid
-            $timestamp = strtotime($date);
-            if ($timestamp === false) {
-                throw new \InvalidArgumentException('Invalid date format. Date must be in a recognizable format. Suggested format : Y-m-d OR d-m-Y');
-            }
-
-            // Convert to Y-m-d format
-            $formattedDate = date('Y-m-d', $timestamp);
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereDate(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, $formattedDate, $operator, 'AND');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function orWhereDate($column, $date, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            // Check if date is valid
-            $timestamp = strtotime($date);
-            if ($timestamp === false) {
-                throw new \InvalidArgumentException('Invalid date format. Date must be in a recognizable format. Suggested format : Y-m-d OR d-m-Y');
-            }
-
-            // Convert to Y-m-d format
-            $formattedDate = date('Y-m-d', $timestamp);
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereDate(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, $formattedDate, $operator, 'OR');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function whereDay($column, $day, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($day) || $day < 1 || $day > 31) {
-                throw new \InvalidArgumentException('Invalid day. Must be a number between 1 and 31.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereDay(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$day, $operator, 'AND');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function orWhereDay($column, $day, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($day) || $day < 1 || $day > 31) {
-                throw new \InvalidArgumentException('Invalid day. Must be a number between 1 and 31.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereDay(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$day, $operator, 'OR');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function whereMonth($column, $month, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($month) || $month < 1 || $month > 12) {
-                throw new \InvalidArgumentException('Invalid month. Must be a number between 1 and 12.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereMonth(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$month, $operator, 'AND');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function orWhereMonth($column, $month, $operator = '=')
-    {
-        try {
-
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($month) || $month < 1 || $month > 12) {
-                throw new \InvalidArgumentException('Invalid month. Must be a number between 1 and 12.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereMonth(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$month, $operator, 'OR');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function whereYear($column, $year, $operator = '=')
-    {
-        try {
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($year) || strlen((string)$year) !== 4) {
-                throw new \InvalidArgumentException('Invalid year. Must be a four-digit number.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereYear(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$year, $operator, 'AND');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function orWhereYear($column, $year, $operator = '=')
-    {
-        try {
-            if (!is_string($column)) {
-                throw new \InvalidArgumentException('Invalid column name. Must be a string.');
-            }
-
-            if (!is_numeric($year) || strlen((string)$year) !== 4) {
-                throw new \InvalidArgumentException('Invalid year. Must be a four-digit number.');
-            }
-
-            // Check if operator is supported
-            $supportedOperators = ['=', '<', '>', '<=', '>=', '<>', '!='];
-            if (!in_array($operator, $supportedOperators)) {
-                throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
-            }
-
-            // Check if variable contains a full SQL statement
-            $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereYear(). Please use simpleQuery() function.');
-
-            $this->_buildWhereClause($column, (int)$year, $operator, 'OR');
-            return $this;
-        } catch (\InvalidArgumentException $e) {
-            $this->db_error_log($e, __FUNCTION__);
-        }
-    }
-
-    // Override function logic based on driver
-    public function whereJsonContains($columnName, $jsonPath, $value)
-    {
-        // Check if the column is not null
-        $this->whereNotNull($columnName);
-
-        // Construct the JSON search condition
-        $jsonCondition = "JSON_CONTAINS($columnName, '" . json_encode([$jsonPath => $value]) . "', '$')";
-
-        // Add the condition to the query builder
-        $this->where($jsonCondition, null, 'JSON');
-        return $this;
-    }
+    // Override function 
+    abstract public function whereDate($column, $date, $operator = '=');
+    abstract public function orWhereDate($column, $date, $operator = '=');
+    abstract public function whereDay($column, $day, $operator = '=');
+    abstract public function orWhereDay($column, $day, $operator = '=');
+    abstract public function whereMonth($column, $month, $operator = '=');
+    abstract public function orWhereMonth($column, $month, $operator = '=');
+    abstract public function whereYear($column, $year, $operator = '=');
+    abstract public function orWhereYear($column, $year, $operator = '=');
+    abstract public function whereJsonContains($columnName, $jsonPath, $value);
 
     public function join($table, $foreignKey, $localKey, $joinType = 'LEFT')
     {
-        // Validate input parameters
-        if (!is_string($table) || !is_string($foreignKey) || !is_string($localKey)) {
-            throw new \InvalidArgumentException('Invalid column names or table name provided.');
+        if (empty($this->table)) {
+            throw new \Exception('No table selected', 400);
         }
+
+        $this->validateColumn($table, 'table');
+        $this->validateColumn($foreignKey, 'Foreign Key');
+        $this->validateColumn($localKey, 'Local Key');
+        $this->validateColumn($joinType, 'Type Joining');
 
         $validJoinTypes = ['INNER', 'LEFT', 'RIGHT', 'OUTER', 'LEFT OUTER', 'RIGHT OUTER'];
         if (!in_array(strtoupper($joinType), $validJoinTypes)) {
             throw new \InvalidArgumentException('Invalid join type. Valid types are: ' . implode(', ', $validJoinTypes));
-        }
-
-        if (empty($this->table)) {
-            throw new \Exception('No table selected', 400);
         }
 
         // Build the join clause
@@ -1053,14 +755,13 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
 
     public function leftJoin($table, $foreignKey, $localKey, $conditions = null)
     {
-        // Validate input parameters
-        if (!is_string($table) || !is_string($foreignKey) || !is_string($localKey)) {
-            throw new \InvalidArgumentException('Invalid column names or table name provided.');
-        }
-
         if (empty($this->table)) {
             throw new \Exception('No table selected', 400);
         }
+
+        $this->validateColumn($table, 'Table');
+        $this->validateColumn($foreignKey, 'Foreign Key');
+        $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
         $this->joins .= " LEFT JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
@@ -1070,14 +771,13 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
 
     public function rightJoin($table, $foreignKey, $localKey, $conditions = null)
     {
-        // Validate input parameters
-        if (!is_string($table) || !is_string($foreignKey) || !is_string($localKey)) {
-            throw new \InvalidArgumentException('Invalid column names or table name provided.');
-        }
-
         if (empty($this->table)) {
             throw new \Exception('No table selected', 400);
         }
+
+        $this->validateColumn($table, 'Table');
+        $this->validateColumn($foreignKey, 'Foreign Key');
+        $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
         $this->joins .= " RIGHT JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
@@ -1087,14 +787,13 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
 
     public function innerJoin($table, $foreignKey, $localKey, $conditions = null)
     {
-        // Validate input parameters
-        if (!is_string($table) || !is_string($foreignKey) || !is_string($localKey)) {
-            throw new \InvalidArgumentException('Invalid column names or table name provided.');
-        }
-
         if (empty($this->table)) {
             throw new \Exception('No table selected', 400);
         }
+
+        $this->validateColumn($table, 'Table');
+        $this->validateColumn($foreignKey, 'Foreign Key');
+        $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
         $this->joins .= " INNER JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
@@ -1104,14 +803,13 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
 
     public function outerJoin($table, $foreignKey, $localKey, $conditions = null)
     {
-        // Validate input parameters
-        if (!is_string($table) || !is_string($foreignKey) || !is_string($localKey)) {
-            throw new \InvalidArgumentException('Invalid column names or table name provided.');
-        }
-
         if (empty($this->table)) {
             throw new \Exception('No table selected', 400);
         }
+
+        $this->validateColumn($table, 'Table');
+        $this->validateColumn($foreignKey, 'Foreign Key');
+        $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
         $this->joins .= " FULL OUTER JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
@@ -1291,6 +989,8 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
         } else {
             $this->where .= " $whereType ";
         }
+
+        $this->validateColumn($columnName);
 
         $placeholder = '?'; // Use a single placeholder for all conditions
 
@@ -2647,77 +2347,6 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
     }
 
     /**
-     * Caches data with an expiration time.
-     *
-     * This method sets a cache entry identified by the provided key with optional expiration time.
-     *
-     * @param string $key The unique key identifying the cache entry.
-     * @param int $expire The expiration time of the cache entry in seconds (default: 1800 seconds).
-     * @return $this Returns the current object instance for method chaining.
-     */
-    public function cache($key, $expire = 1800)
-    {
-        $this->cacheFile = $key;
-        $this->cacheFileExpired = $expire;
-
-        return $this;
-    }
-
-    /**
-     * Retrieves cached data for the given key.
-     *
-     * This method retrieves cached data identified by the provided key using the Cache class.
-     *
-     * @param string $key The unique key identifying the cached data.
-     * @return mixed|null Returns the cached data if found; otherwise, returns null.
-     */
-    protected function _getCacheData($key)
-    {
-        $cache = new DatabaseCache();
-        return $cache->get($key);
-    }
-
-    /**
-     * Stores data in the cache with an optional expiration time.
-     *
-     * This method stores data identified by the provided key in the cache using the Cache class.
-     *
-     * @param string $key The unique key identifying the cache entry.
-     * @param mixed $data The data to be stored in the cache.
-     * @param int $expire The expiration time of the cache entry in seconds (default: 1800 seconds).
-     * @return bool Returns true on success, false on failure.
-     */
-    protected function _setCacheData($key, $data, $expire = 1800)
-    {
-        $cache = new DatabaseCache();
-        return $cache->set($key, $data, $expire);
-    }
-
-    /**
-     * Validates a raw query string to prevent full SQL statement execution.
-     *
-     * This function ensures the provided string only contains allowed expressions. 
-     * It throws an exception if the string contains keywords associated with full SQL statements like `SELECT`, `INSERT`,
-     * etc.
-     *
-     * @param string|array $string The raw query string to validate.
-     * @param string $message (Optional) The exception message to throw (defaults to "Not supported to run full query").
-     * @throws \InvalidArgumentException If the string contains forbidden keywords.
-     */
-    protected function _forbidRawQuery($string, $message = 'Not supported to run full query')
-    {
-        $stringArr = is_string($string) ? [$string] : $string;
-
-        $forbiddenKeywords = '/\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|REPLACE|GRANT|REVOKE|SHOW)\b/i';
-
-        foreach ($stringArr as $str) {
-            if (preg_match($forbiddenKeywords, $str)) {
-                throw new \InvalidArgumentException($message);
-            }
-        }
-    }
-
-    /**
      * Binds parameters to a prepared statement.
      *
      * This function iterates through the provided bind values and binds them
@@ -2892,29 +2521,5 @@ abstract class BaseDatabase implements ConnectionInterface, BuilderStatementInte
         } catch (\Exception $e) {
             throw new \Exception('Database error occurred.', 0, $e);
         }
-    }
-
-    /**
-     * Formats a number of bytes into a human-readable string with units.
-     *
-     * This function takes a number of bytes and converts it to a human-readable
-     * format with appropriate units (B, KB, MB, GB, TB). It uses a specified
-     * precision for rounding the value.
-     *
-     * @param int $bytes The number of bytes to format.
-     * @param int $precision (optional) The number of decimal places to round to. Defaults to 2.
-     * @return string The formatted string with units (e.g., 1023.45 KB).
-     */
-    protected function _formatBytes($bytes, $precision = 2)
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-
-        $bytes = max($bytes, 0); // Ensure non-negative bytes
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024)); // Calculate power of 1024
-        $pow = min($pow, count($units) - 1); // Limit to valid unit index
-
-        $bytes /= (1 << (10 * $pow)); // Divide by appropriate factor
-
-        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 }
