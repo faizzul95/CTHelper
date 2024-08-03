@@ -22,7 +22,7 @@ interface ConnectionInterface
      *
      * @return void
      */
-    public function initialize(array $config);
+    public function addConnection(string $connectionID, array $config);
 
     /**
      * Connect to the database.

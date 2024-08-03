@@ -29,22 +29,20 @@ class Database
         '-' => 'Unknown'
     ];
 
-    public function __construct(string $connectionID = 'default', array $config)
+    public function __construct(string $driver = 'mysql')
     {
-        if (empty($config)) {
-            throw new \InvalidArgumentException("No configuration found.");
+        if (empty($driver)) {
+            throw new \InvalidArgumentException("No driver found.");
         }
 
-        $dbPlatform = isset($config['driver']) ? strtolower($config['driver']) : '-';
+        $dbPlatform = strtolower($driver);
 
         if (!isset($this->listDatabasePlatSupport[$dbPlatform])) {
             throw new \InvalidArgumentException("Unsupported database driver: {$dbPlatform}");
         }
 
-        $driverClass = "Core\\Drivers\\" . $this->listDatabasePlatSupport[$dbPlatform] . "Driver";
+        $driverClass = "Core\\Database\\Drivers\\" . $this->listDatabasePlatSupport[$dbPlatform] . "Driver";
         $this->db = new $driverClass;
-        $this->db->setConnection($connectionID);
-        $this->db->initialize($config);
     }
 
     public function __call($method, $args)

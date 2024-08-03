@@ -17,42 +17,56 @@ use Core\Database\BaseDatabase;
 
 class OciDriver extends BaseDatabase
 {
-    public function connect($connectionName = 'default')
+    public function connect($connectionID = null)
     {
-        $dsn = "oci:dbname={$this->config['host']}/{$this->config['database']}";
-        if (isset($this->config['charset'])) {
-            $dsn .= ";charset={$this->config['charset']}";
+        $connectionName = !empty($connectionID) ? $connectionID : $this->connectionName;
+
+        if (!isset($this->config[$connectionName])) {
+            die("Configuration for $connectionName not found");
         }
 
-        try {
-            // Connection options
-            $options = [
-                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC
-            ];
+        $this->setConnection($connectionName);
+        $this->setDatabase($this->config[$connectionName]['database']);
 
-            $pdo = new \PDO($dsn, $this->config['username'], $this->config['password'], $options);
+        if (!isset($this->pdo[$connectionName])) {
+            $dsn = "oci:dbname={$this->config[$connectionName]['host']}/{$this->config[$connectionName]['database']}";
 
-            $this->setConnection($connectionName);
-            $this->setDatabase($this->config['database']);
-            $this->pdo[$this->connectionName] = $pdo;
+            if (isset($this->config[$connectionName]['charset'])) {
+                $dsn .= ";charset={$this->config[$connectionName]['charset']}";
+            }
 
-        } catch (\PDOException $e) {
-            throw new \Exception($e->getMessage());
+            try {
+                // Connection options
+                $options = [
+                    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC
+                ];
+
+                $pdo = new \PDO($dsn, $this->config[$connectionName]['username'], $this->config[$connectionName]['password'], $options);
+                $this->pdo[$this->connectionName] = $pdo;
+                
+            } catch (\PDOException $e) {
+                throw new \Exception($e->getMessage());
+            }
         }
+
+        $this->driver = $this->config[$connectionName]['driver'];
+        self::$_instance = $this;
+
+        return $this;
     }
 
     public function whereDate($column, $date, $operator = '=')
     {
         try {
             $this->validateColumn($column);
-            
+
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereDate(). Please use simpleQuery() function.');
 
             $formattedDate = $this->validateDate($date);
             $this->validateOperator($operator);
-    
+
             $this->_buildWhereClause("TO_DATE($column, 'YYYY-MM-DD')", $formattedDate, $operator, 'AND');
             return $this;
         } catch (\InvalidArgumentException $e) {
@@ -64,13 +78,13 @@ class OciDriver extends BaseDatabase
     {
         try {
             $this->validateColumn($column);
-            
+
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereDate(). Please use simpleQuery() function.');
 
             $formattedDate = $this->validateDate($date);
             $this->validateOperator($operator);
-    
+
             $this->_buildWhereClause("TO_DATE($column, 'YYYY-MM-DD')", $formattedDate, $operator, 'OR');
             return $this;
         } catch (\InvalidArgumentException $e) {
@@ -82,7 +96,7 @@ class OciDriver extends BaseDatabase
     {
         try {
             $this->validateColumn($column);
-            
+
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in whereDay(). Please use simpleQuery() function.');
 
@@ -100,7 +114,7 @@ class OciDriver extends BaseDatabase
     {
         try {
             $this->validateColumn($column);
-            
+
             // Check if variable contains a full SQL statement
             $this->_forbidRawQuery($column, 'Full/Sub SQL statements are not allowed in orWhereDay(). Please use simpleQuery() function.');
 

@@ -164,16 +164,6 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     protected $_profilerActive = 'main';
 
     /**
-     * @var string|null The cache key.
-     */
-    protected $cacheFile = null;
-
-    /**
-     * @var string|integer The cache to expire in seconds.
-     */
-    protected $cacheFileExpired = 1800;
-
-    /**
      * @var bool Whether parallel processing is enabled.
      */
     protected $_parallelEnabled = false;
@@ -212,20 +202,40 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
 
     # Implement ConnectionInterface logic
 
-    public function initialize(array $config)
+    /**
+     * Create & store a new PDO instance
+     *
+     * @param string $name
+     * @param array  $params
+     *
+     * @return $this
+     */
+    public function addConnection($name, array $params)
     {
-        $this->config = $config;
-        $this->driver = isset($this->config['driver']) ? strtolower($this->config['driver']) : '-';
-        self::$_instance = $this;
+        $this->config[$name] = array();
+        foreach (array('driver', 'host', 'username', 'password', 'database', 'port', 'socket', 'charset') as $k) {
+            $prm = isset($params[$k]) ? $params[$k] : null;
+
+            if ($k == 'host') {
+                if (is_object($prm)) {
+                    $this->pdo[$name] = $prm;
+                }
+
+                if (!is_string($prm)) {
+                    $prm = null;
+                }
+            }
+
+            $this->config[$name][$k] = $prm;
+        }
+
+        return $this;
     }
 
-    abstract public function connect($connectionName = 'default');
+    abstract public function connect();
 
     public function setConnection($connectionID)
     {
-        if (!isset($this->config[$connectionID]))
-            throw new \Exception('Connection ' . $connectionID . ' was not added.');
-
         $this->connectionName = $connectionID;
     }
 
@@ -299,7 +309,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->_query = [];
         $this->relations = [];
         $this->cacheFile = null;
-        $this->cacheFileExpired = 1800;
+        $this->cacheFileExpired = 3600;
         $this->_profilerActive = 'main';
 
         return $this;
@@ -748,7 +758,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         }
 
         // Build the join clause
-        $this->joins .= " $joinType JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey`";
+        $this->joins .= " $joinType JOIN `$table` ON $foreignKey = $localKey";
 
         return $this;
     }
@@ -764,8 +774,8 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
-        $this->joins .= " LEFT JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
-
+        $this->joins .= " LEFT JOIN `$table` ON $foreignKey = $localKey $conditions";
+        
         return $this;
     }
 
@@ -780,7 +790,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
-        $this->joins .= " RIGHT JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
+        $this->joins .= " RIGHT JOIN `$table` ON $foreignKey = $localKey $conditions";
 
         return $this;
     }
@@ -796,7 +806,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
-        $this->joins .= " INNER JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
+        $this->joins .= " INNER JOIN `$table` ON $foreignKey = $localKey $conditions";
 
         return $this;
     }
@@ -812,7 +822,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->validateColumn($localKey, 'Local Key');
 
         // Build the join clause
-        $this->joins .= " FULL OUTER JOIN `$table` ON `$table`.`$foreignKey` = `$this->table`.`$localKey` $conditions";
+        $this->joins .= " FULL OUTER JOIN `$table` ON $foreignKey = $localKey $conditions";
 
         return $this;
     }
@@ -1024,11 +1034,16 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
                 break;
         }
 
-        if (!empty($value)) {
+        if (!empty($value) || $value == 0) {
             if (is_array($value)) {
                 $this->_binds = array_merge($this->_binds, $value);
             } else {
-                $this->_binds[] = $value;
+                // Check data type and add quotes if necessary
+                if (is_numeric($value) && (int)$value === $value) {
+                    $this->_binds[] = $value; // Integer, no quotes
+                } else {
+                    $this->_binds[] = "'$value'"; // Add quotes for other data types
+                }
             }
         }
     }
@@ -1471,6 +1486,10 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $_temp_connection = $this->connectionName;
         $_temp_relations = $this->relations;
 
+        // Assign temporary return type
+        $_temp_returnType = $this->returnType;
+        $this->returnType = 'array'; // reset to enabled eager load
+
         // Reset internal properties for next query
         $this->reset();
 
@@ -1479,12 +1498,15 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
             $paginate['data'] = $this->_processEagerLoading($paginate['data'], $_temp_relations, $_temp_connection, 'get');
         }
 
-        unset($_temp_connection, $_temp_relations);
-
         // Reset safeOutput
         $this->safeOutput(false);
 
-        return $paginate;
+        // Assign return type to original state
+        $this->returnType = $_temp_returnType;
+
+        unset($_temp_connection, $_temp_relations, $_temp_returnType);
+
+        return $this->_returnResult($paginate);
     }
 
     // Implement BuilderCrudInterface logic
@@ -1871,13 +1893,13 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
 
         switch ($this->returnType) {
             case 'object':
-                return json_decode(json_encode($data));
+                $data = json_decode(json_encode($data), FALSE);
             case 'json':
-                return json_encode($data);
-            case 'array':
-            default:
-                return $data;
+                $data = json_encode($data);
         }
+
+        $this->returnType = 'array'; // reset to original
+        return $data;
     }
 
     /**
@@ -2021,7 +2043,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     protected function _processEagerLoading(&$data, $relations, $connectionName, $typeFetch)
     {
         $data = $typeFetch == 'fetch' ? [$data] : $data;
-        $connectionObj = $this->getInstance()->connection($connectionName);
+        $connectionObj = $this->getInstance()->connect($connectionName);
 
         foreach ($relations as $alias => $eager) {
 
@@ -2072,7 +2094,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
      */
     protected function _processEagerLoadingInBatches(&$data, $primaryKeys, $table, $fk_id, $pk_id, $connectionName, $method, $alias, \Closure $callback = null)
     {
-        $connectionObj = $this->getInstance()->connection($connectionName);
+        $connectionObj = $this->getInstance()->connect($connectionName);
 
         $chunks = array_chunk($primaryKeys, $this->_parallelBatchSize);
 

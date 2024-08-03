@@ -18,6 +18,17 @@ use Core\Database\DatabaseCache;
 
 class DatabaseHelper
 {
+    /**
+     * @var string|null The cache key.
+     */
+    protected $cacheFile = null;
+
+    /**
+     * @var string|integer The cache to expire in seconds.
+     */
+    protected $cacheFileExpired = 3600;
+    
+
     # GENERAL SECTION
 
     /**
@@ -42,6 +53,30 @@ class DatabaseHelper
                 throw new \InvalidArgumentException($message);
             }
         }
+    }
+
+    /**
+     * Formats a number of bytes into a human-readable string with units.
+     *
+     * This function takes a number of bytes and converts it to a human-readable
+     * format with appropriate units (B, KB, MB, GB, TB). It uses a specified
+     * precision for rounding the value.
+     *
+     * @param int $bytes The number of bytes to format.
+     * @param int $precision (optional) The number of decimal places to round to. Defaults to 2.
+     * @return string The formatted string with units (e.g., 1023.45 KB).
+     */
+    protected function _formatBytes($bytes, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+        $bytes = max($bytes, 0); // Ensure non-negative bytes
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024)); // Calculate power of 1024
+        $pow = min($pow, count($units) - 1); // Limit to valid unit index
+
+        $bytes /= (1 << (10 * $pow)); // Divide by appropriate factor
+
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 
     # CACHING SECTION
@@ -101,7 +136,8 @@ class DatabaseHelper
      * @param string $column The column name to validate.
      * @throws InvalidArgumentException If the column name is not a string or no value.
      */
-    protected function validateColumn($column, $default = 'Column') {
+    protected function validateColumn($column, $default = 'Column')
+    {
         if (!is_string($column)) {
             throw new \InvalidArgumentException("Invalid $default value. Must be a string.");
         }
@@ -119,7 +155,8 @@ class DatabaseHelper
      * @return string The validated date in Y-m-d format.
      * @throws InvalidArgumentException If the date format is not recognized.
      */
-    protected function validateDate($date) {
+    protected function validateDate($date)
+    {
         $timestamp = strtotime($date);
         if ($timestamp === false) {
             throw new \InvalidArgumentException('Invalid date format. Date must be in a recognizable format. Suggested format : Y-m-d OR d-m-Y');
@@ -134,7 +171,8 @@ class DatabaseHelper
      * @param array $extra The extra operator to validate.
      * @throws InvalidArgumentException If the operator is not supported.
      */
-    protected function validateOperator($operator, $extra = []) {
+    protected function validateOperator($operator, $extra = [])
+    {
         $supportedOperators = array_merge(['=', '<', '>', '<=', '>=', '<>', '!='], $extra);
         if (!in_array($operator, $supportedOperators)) {
             throw new \InvalidArgumentException('Invalid operator. Supported operators are: ' . implode(', ', $supportedOperators));
@@ -147,7 +185,8 @@ class DatabaseHelper
      * @param int $day The day to validate.
      * @throws InvalidArgumentException If the day is not a valid number between 1 and 31.
      */
-    protected function validateDay($day) {
+    protected function validateDay($day)
+    {
         if (!is_numeric($day) || $day < 1 || $day > 31) {
             throw new \InvalidArgumentException('Invalid day. Must be a number between 1 and 31.');
         }
@@ -159,7 +198,8 @@ class DatabaseHelper
      * @param int $month The month to validate.
      * @throws InvalidArgumentException If the month is not a valid number between 1 and 12.
      */
-    protected function validateMonth($month) {
+    protected function validateMonth($month)
+    {
         if (!is_numeric($month) || $month < 1 || $month > 12) {
             throw new \InvalidArgumentException('Invalid month. Must be a number between 1 and 12.');
         }
@@ -171,7 +211,8 @@ class DatabaseHelper
      * @param int $year The year to validate.
      * @throws InvalidArgumentException If the year is not a valid four-digit number.
      */
-    protected function validateYear($year) {
+    protected function validateYear($year)
+    {
         if (!is_numeric($year) || strlen((string)$year) !== 4) {
             throw new \InvalidArgumentException('Invalid year. Must be a four-digit number.');
         }
