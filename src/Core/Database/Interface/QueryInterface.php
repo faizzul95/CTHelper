@@ -85,4 +85,18 @@ interface QueryInterface
      * @return mixed The paginated result set.
      */
     public function paginate($currentPage = 1, $limit = 10, $draw = 1);
+
+    /**
+     * Returns the current SQL query without showing the eager query.
+     *
+     * @return string The current SQL query as a string.
+     */
+    public function toSql();
+
+    /**
+     * Returns the entire SQL query, including eager loading, without actually executing it.
+     *
+     * @return array The SQL query as an array.
+     */
+    public function toDebugSql();
 }

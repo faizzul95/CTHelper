@@ -55,7 +55,6 @@ class MySQLDriver extends BaseDatabase
 
                 $pdo = new \PDO($dsn, $this->config[$connectionName]['username'], $this->config[$connectionName]['password'], $options);
                 $this->pdo[$connectionName] = $pdo;
-                
             } catch (\PDOException $e) {
                 throw new \Exception($e->getMessage());
             }
@@ -222,5 +221,91 @@ class MySQLDriver extends BaseDatabase
         // Add the condition to the query builder
         $this->where($jsonCondition, null, 'JSON');
         return $this;
+    }
+
+    public function limit($limit)
+    {
+        // Try to cast the input to an integer
+        $limit = filter_var($limit, FILTER_VALIDATE_INT);
+
+        // Check if the input is not an integer after casting
+        if ($limit === false) {
+            throw new \InvalidArgumentException('Limit must be an integer.');
+        }
+
+        // Check if the input is less then 1
+        if ($limit < 1) {
+            throw new \InvalidArgumentException('Limit must be integer with higher then zero');
+        }
+
+        $this->limit =  " LIMIT $limit";
+        return $this;
+    }
+
+    public function offset($offset)
+    {
+        // Try to cast the input to an integer
+        $offset = filter_var($offset, FILTER_VALIDATE_INT);
+
+        // Check if the input is not an integer after casting
+        if ($offset === false) {
+            throw new \InvalidArgumentException('Offset must be an integer.');
+        }
+
+        // Check if the input is less then 0
+        if ($offset < 0) {
+            throw new \InvalidArgumentException('Offset must be integer with higher or equal to zero');
+        }
+
+        $this->offset = " OFFSET $offset";
+        return $this;
+    }
+
+    public function _getLimitOffsetPaginate($query, $limit, $offset)
+    {
+        // Try to cast the input to an integer
+        $limit = filter_var($limit, FILTER_VALIDATE_INT);
+        $offset = filter_var($offset, FILTER_VALIDATE_INT);
+
+        // Check if the input is not an integer after casting
+        if ($offset === false) {
+            throw new \InvalidArgumentException('Offset must be an integer.');
+        }
+
+        // Check if the input is less then 0
+        if ($offset < 0) {
+            throw new \InvalidArgumentException('Offset must be integer with higher or equal to zero');
+        }
+
+        // Check if the input is not an integer after casting
+        if ($limit === false) {
+            throw new \InvalidArgumentException('Limit must be an integer.');
+        }
+
+        // Check if the input is less then 1
+        if ($limit < 1) {
+            throw new \InvalidArgumentException('Limit must be integer with higher then zero');
+        }
+
+        return "$query LIMIT $limit OFFSET $offset";
+    }
+
+    protected function sanitizeColumn($data)
+    {
+        $stmt = $this->pdo[$this->connectionName]->prepare("DESCRIBE {$this->schema}.{$this->table}");
+        $stmt->execute();
+        $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        // Filter $data array based on $columns_table
+        $data = array_intersect_key($data, array_flip($columns_table));
+
+        if ($this->_secureInput) {
+            // Sanitize each value in the $data array
+            $data = array_map(function ($value) {
+                return !is_null($value) && $value !== '' ? $this->sanitize($value) : $value;
+            }, $data);
+        }
+
+        return $data;
     }
 }

@@ -311,6 +311,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $this->cacheFile = null;
         $this->cacheFileExpired = 3600;
         $this->_profilerActive = 'main';
+        $this->returnType = 'array';
 
         return $this;
     }
@@ -775,7 +776,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
 
         // Build the join clause
         $this->joins .= " LEFT JOIN `$table` ON $foreignKey = $localKey $conditions";
-        
+
         return $this;
     }
 
@@ -924,45 +925,9 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         return $this;
     }
 
-    // Override function logic based on driver
-    public function limit($limit)
-    {
-        // Try to cast the input to an integer
-        $limit = filter_var($limit, FILTER_VALIDATE_INT);
-
-        // Check if the input is not an integer after casting
-        if ($limit === false) {
-            throw new \InvalidArgumentException('Limit must be an integer.');
-        }
-
-        // Check if the input is less then 1
-        if ($limit < 1) {
-            throw new \InvalidArgumentException('Limit must be integer with higher then zero');
-        }
-
-        $this->limit =  " LIMIT " . $limit;
-        return $this;
-    }
-
-    // Override function logic based on driver
-    public function offset($offset)
-    {
-        // Try to cast the input to an integer
-        $offset = filter_var($offset, FILTER_VALIDATE_INT);
-
-        // Check if the input is not an integer after casting
-        if ($offset === false) {
-            throw new \InvalidArgumentException('Offset must be an integer.');
-        }
-
-        // Check if the input is less then 0
-        if ($offset < 0) {
-            throw new \InvalidArgumentException('Offset must be integer with higher or equal to zero');
-        }
-
-        $this->offset = " OFFSET " . $offset;
-        return $this;
-    }
+    // Override function 
+    abstract public function limit($limit);
+    abstract public function offset($offset);
 
     public function with($alias, $table, $foreign_key, $local_key, \Closure $callback = null)
     {
@@ -1401,7 +1366,6 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         return $this;
     }
 
-    // Override function logic based on driver
     public function paginate($currentPage = 1, $limit = 10, $draw = 1)
     {
         // Reset the offset & limit to ensure the $this->_query not generate with that when call _buildSelectQuery() function
@@ -1427,7 +1391,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
             $totalPages = ceil($total / $limit);
 
             // Add LIMIT and OFFSET clauses to the main query
-            $this->_query .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+            $this->_query = $this->_getLimitOffsetPaginate($this->_query, $limit, $offset);
 
             // Execute the main query
             $stmt = $this->pdo[$this->connectionName]->prepare($this->_query);
@@ -1486,9 +1450,8 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $_temp_connection = $this->connectionName;
         $_temp_relations = $this->relations;
 
-        // Assign temporary return type
+        // Assign temporary return type before reset
         $_temp_returnType = $this->returnType;
-        $this->returnType = 'array'; // reset to enabled eager load
 
         // Reset internal properties for next query
         $this->reset();
@@ -1507,6 +1470,67 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         unset($_temp_connection, $_temp_relations, $_temp_returnType);
 
         return $this->_returnResult($paginate);
+    }
+
+    // Helper for paginate. override in each driver
+    abstract public function _getLimitOffsetPaginate($query, $limit, $offset);
+
+    public function toSql()
+    {
+        // Build the final SELECT query string
+        $this->_buildSelectQuery();
+        
+        return $this->_query;
+    }
+
+    public function toDebugSql()
+    {
+        // Build the final SELECT query string
+        $this->_buildSelectQuery();
+
+        // Generate the full query string with bound values
+        $this->_generateFullQuery($this->_query, $this->_binds);
+
+        // Add a main query
+        $queryList['main_query'] = $this->_query;
+
+        // Save connection name, relations & caching info temporarily
+        $_temp_connection = $this->connectionName;
+        $_temp_relations = $this->relations;
+
+        // Reset internal properties for next query
+        $this->reset();
+
+        if (!empty($_temp_relations)) {
+            foreach ($_temp_relations as $alias => $relation) {
+
+                $table = $relation['details']['table'];
+                $fk_id = $relation['details']['foreign_key'];
+                $callback = $relation['details']['callback'];
+
+                $connectionObj = $this->getInstance()->connect($_temp_connection);
+
+                $chunk = ['example1'];
+                $relatedRecordsQuery = $connectionObj->table($table)->whereIn($fk_id, $chunk);
+
+                // Apply callback if provided for customization
+                if ($callback instanceof \Closure) {
+                    $callback($relatedRecordsQuery);
+                }
+
+                // Build the final SELECT query string
+                $this->_buildSelectQuery();
+
+                $queryList['with_' . $alias] = $this->toDebugSql();
+
+                // Reset internal properties for next query
+                $this->reset();
+            }
+        }
+
+        unset($_temp_connection, $_temp_relations);
+
+        return $queryList;
     }
 
     // Implement BuilderCrudInterface logic
@@ -1934,80 +1958,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
      * @return array The sanitized column data.
      * @throws \Exception If there's an error accessing the database or if the table does not exist.
      */
-    protected function sanitizeColumn($data)
-    {
-        $table = $this->table;
-        $param = null;
-
-        // Get columns from table schema based on database driver
-        switch ($this->driver) {
-            case 'mysql':
-                $sql = "DESCRIBE {$this->schema}.$table";
-                break;
-            case 'mssql':
-                $sql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?";
-                $param = [$table, $this->schema];
-                break;
-            case 'oracle':
-            case 'oci':
-                $sql = "SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = ? AND OWNER = ?";
-                $param = [$table, $this->schema];
-                break;
-            case 'firebird':
-            case 'fdb':
-                $sql = "SELECT RDB\$FIELD_NAME FROM RDB\$RELATION_FIELDS WHERE RDB\$RELATION_NAME = ? AND RDB\$OWNER_NAME = ?";
-                $param = [$table, $this->schema];
-                break;
-            default:
-                throw new \Exception("Unsupported database driver '{$this->driver}'", 500);
-        }
-
-        $stmt = $this->pdo[$this->connectionName]->prepare($sql);
-        $stmt->execute($param);
-        $columns_table = $stmt->fetchAll(\PDO::FETCH_COLUMN);
-
-        // Filter $data array based on $columns_table
-        $data = array_intersect_key($data, array_flip($columns_table));
-
-        if ($this->_secureInput) {
-            // Sanitize each value in the $data array
-            $data = array_map(function ($value) {
-                return !is_null($value) && $value !== '' ? $this->sanitize($value) : $value;
-            }, $data);
-        }
-
-        return $data;
-    }
-
-    /**
-     * Sanitize input data to prevent XSS and SQL injection attacks based on the secure flag.
-     *
-     * @param mixed $value The input data to sanitize.
-     * @return mixed|null The sanitized input data or null if $value is null or empty.
-     */
-    protected function sanitize($value = null)
-    {
-        // Check if $value is not null or empty
-        if (!isset($value) || is_null($value)) {
-            return $value;
-        }
-
-        // Sanitize input based on data type
-        switch (gettype($value)) {
-            case 'string':
-                return htmlspecialchars(trim($value), ENT_QUOTES, 'UTF-8');  // Apply XSS protection and trim
-            case 'integer':
-            case 'double':
-                return $value;
-            case 'boolean':
-                return (bool) $value;
-            case 'array':
-                return array_map([$this, 'sanitize'], $value);
-            default:
-                // Handle unexpected data types (consider throwing an exception)
-                throw new \InvalidArgumentException("Unsupported data type for sanitization: " . gettype($value));
-        }
-    }
+    abstract protected function sanitizeColumn($data);
 
     /**
      * Sanitizes the output data to prevent XSS attacks by applying htmlspecialchars

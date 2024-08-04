@@ -158,7 +158,48 @@ function script9()
         ->select('users.id,users.name,users.nickname,school_users.school_profile_id,schools.name AS company_name')
         ->leftJoin('school_users', '`school_users`.`user_id`', 'users.id')
         ->leftJoin('schools', '`school_users`.`school_id`', '`schools`.`id`')
+        ->safeOutput()
         ->paginate(1);
+
+    return $result;
+}
+
+/**
+ * Script 9     : Retrieve paginated user data with school information.
+ * Expectation  : Retrieve users along with their associated school information in a paginated manner.
+ * Remark       : This script queries the 'users' table and joins it with 'school_users' and 'schools' tables to fetch user data along with associated school details.
+ * Result       : Pass.
+ */
+function script10()
+{
+    // $result = db('slave')
+    //     ->table('users')
+    //     ->where('id', 1)
+    //     ->whereDate('created_at', '2023-02-15')
+    //     ->select('users.id,users.name,users.nickname,school_users.school_profile_id,schools.name AS company_name')
+    //     ->leftJoin('school_users', '`school_users`.`user_id`', 'users.id')
+    //     ->rightJoin('schools', '`school_users`.`school_id`', '`schools`.`id`')
+    //     ->toSql();
+
+    $db = db();
+    $result = $db->table('user_profile')
+        ->select('id,user_id,role_id,is_main,profile_status')
+        ->where('is_main', 1)
+        ->withOne('user', 'users', 'id', 'user_id', function ($db) {
+            $db->select('id, name, email');
+        })
+        ->withOne('roles', 'master_roles', 'id', 'role_id', function ($db) {
+            $db->select('id,role_name,role_status')
+                ->where('role_status', 1)
+                ->with('permission', 'system_permission', 'role_id', 'id', function ($db) {
+                    $db->select('id,role_id,abilities_id,forbidden')
+                        ->where('forbidden', 0)
+                        ->withOne('abilities', 'system_abilities', 'id', 'abilities_id', function ($db) {
+                            $db->select('id,title');
+                        });
+                });
+        })
+        ->toDebugSql();
 
     return $result;
 }
@@ -172,7 +213,8 @@ $runner = runTest([
     // 'script6',
     // 'script7',
     // 'script8',
-    'script9',
+    // 'script9',
+    'script10',
 ]);
 
 dd($runner);

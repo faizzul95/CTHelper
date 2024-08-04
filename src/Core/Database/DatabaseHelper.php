@@ -27,9 +27,39 @@ class DatabaseHelper
      * @var string|integer The cache to expire in seconds.
      */
     protected $cacheFileExpired = 3600;
-    
+
 
     # GENERAL SECTION
+
+    /**
+     * Sanitize input data to prevent XSS and SQL injection attacks based on the secure flag.
+     *
+     * @param mixed $value The input data to sanitize.
+     * @return mixed|null The sanitized input data or null if $value is null or empty.
+     */
+    protected function sanitize($value = null)
+    {
+        // Check if $value is not null or empty
+        if (!isset($value) || is_null($value)) {
+            return $value;
+        }
+
+        // Sanitize input based on data type
+        switch (gettype($value)) {
+            case 'string':
+                return htmlspecialchars(trim($value), ENT_QUOTES, 'UTF-8');  // Apply XSS protection and trim
+            case 'integer':
+            case 'double':
+                return $value;
+            case 'boolean':
+                return (bool) $value;
+            case 'array':
+                return array_map([$this, 'sanitize'], $value);
+            default:
+                // Handle unexpected data types (consider throwing an exception)
+                throw new \InvalidArgumentException("Unsupported data type for sanitization: " . gettype($value));
+        }
+    }
 
     /**
      * Validates a raw query string to prevent full SQL statement execution.
