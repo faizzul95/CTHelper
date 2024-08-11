@@ -114,9 +114,9 @@ function script7()
 }
 
 /**
- * Script 8     : Retrieve paginated data from the 'users' table with eager loading of 'profile' and 'schools'.
- * Expectation  : The function should retrieve paginated data from the 'users' table with eager loading of 'profile' and 'schools'.
- * Remark       : The function connects to the 'slave' database before executing the query.
+ * Script 8     : 
+ * Expectation  : 
+ * Remark       : 
  * Result       : Pass.
  */
 function script8()
@@ -146,9 +146,9 @@ function script8()
 }
 
 /**
- * Script 9     : Retrieve paginated user data with school information.
- * Expectation  : Retrieve users along with their associated school information in a paginated manner.
- * Remark       : This script queries the 'users' table and joins it with 'school_users' and 'schools' tables to fetch user data along with associated school details.
+ * Script 9     : 
+ * Expectation  : 
+ * Remark       : 
  * Result       : Pass.
  */
 function script9()
@@ -165,22 +165,45 @@ function script9()
 }
 
 /**
- * Script 9     : Retrieve paginated user data with school information.
- * Expectation  : Retrieve users along with their associated school information in a paginated manner.
- * Remark       : This script queries the 'users' table and joins it with 'school_users' and 'schools' tables to fetch user data along with associated school details.
+ * Script 10     : 
+ * Expectation  : 
+ * Remark       : 
  * Result       : Pass.
  */
 function script10()
 {
-    // $result = db('slave')
-    //     ->table('users')
-    //     ->where('id', 1)
-    //     ->whereDate('created_at', '2023-02-15')
-    //     ->select('users.id,users.name,users.nickname,school_users.school_profile_id,schools.name AS company_name')
-    //     ->leftJoin('school_users', '`school_users`.`user_id`', 'users.id')
-    //     ->rightJoin('schools', '`school_users`.`school_id`', '`schools`.`id`')
-    //     ->toSql();
+    $db = db();
+    $result = $db->table('user_profile')
+        ->select('id,user_id,role_id,is_main,profile_status')
+        ->where('is_main', 1)
+        ->withOne('user', 'users', 'id', 'user_id', function ($db) {
+            $db->select('id, name, email');
+        })
+        ->withOne('roles', 'master_roles', 'id', 'role_id', function ($db) {
+            $db->select('id,role_name,role_status')
+                ->where('role_status', 1)
+                ->with('permission', 'system_permission', 'role_id', 'id', function ($db) {
+                    $db->select('id,role_id,abilities_id,forbidden')
+                        ->where('forbidden', 0)
+                        ->withOne('abilities', 'system_abilities', 'id', 'abilities_id', function ($db) {
+                            $db->select('id,title');
+                        });
+                });
+        })
+        ->safeOutput()
+        ->paginate(1);
 
+    return $result;
+}
+
+/**
+ * Script 15    : 
+ * Expectation  : 
+ * Remark       : 
+ * Result       : Pass.
+ */
+function script15()
+{
     $db = db();
     $result = $db->table('user_profile')
         ->select('id,user_id,role_id,is_main,profile_status')

@@ -1479,7 +1479,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     {
         // Build the final SELECT query string
         $this->_buildSelectQuery();
-        
+
         return $this->_query;
     }
 
@@ -1996,6 +1996,8 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
         $data = $typeFetch == 'fetch' ? [$data] : $data;
         $connectionObj = $this->getInstance()->connect($connectionName);
 
+        $temp_secure_output = $this->_secureOutput;
+
         foreach ($relations as $alias => $eager) {
 
             $method = $eager['type']; // Get the type (get or fetch)
@@ -2022,7 +2024,12 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
                 // Logic to process and attach data to main/subquery data
                 $this->attachEagerLoadedData($method, $data, $relatedRecords, $alias, $fk_id, $pk_id);
             }
+
+            $this->safeOutput($temp_secure_output);
         }
+
+        // Unset the variables to free memory
+        unset($temp_secure_output);
 
         return $typeFetch == 'fetch' ? $data[0] : $data;
     }
@@ -2442,7 +2449,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
             }
 
             // Construct new SELECT part with table.*
-            $selectPart = implode(', ', array_map(fn ($table) => "`$table`.*", $tables));
+            $selectPart = implode(', ', array_map(fn($table) => "`$table`.*", $tables));
             $query = preg_replace('/SELECT\s+\*\s+FROM/i', "SELECT $selectPart FROM", $query, 1);
         } else if (preg_match('/SELECT\s+(.*)\s+FROM\s+([\w]+)/i', $query, $matches)) {
             // Scenario 2: SELECT fields FROM table
