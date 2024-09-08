@@ -164,26 +164,6 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     protected $_profilerActive = 'main';
 
     /**
-     * @var bool Whether parallel processing is enabled.
-     */
-    protected $_parallelEnabled = false;
-
-    /**
-     * @var int The number of worker processes to use for parallel processing (if enabled).
-     */
-    protected $_parallelWorker = 3;
-
-    /**
-     * @var float The duration (in seconds) to sleep before next processing.
-     */
-    protected $_parallelSleep = 1;
-
-    /**
-     * @var int The number of tasks to process in a batch during parallel processing for eager loader.
-     */
-    protected $_parallelBatchSize = 1000;
-
-    /**
      * @var array The list of database support.
      */
     protected $listDatabaseDriverSupport = [
@@ -1317,33 +1297,37 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     {
         $offset = 0;
 
-        // Set the temporary data to holds the original value
-        $_tempConnection = $this->connectionName;
-        $_tempTable = $this->table;
-        $_tempColumn = $this->column;
-        $_tempOrderBy = $this->orderBy;
-        $_tempGroupBy = $this->groupBy;
-        $_tempWhere = $this->where;
-        $_tempJoins = $this->joins;
-        $_tempBinds = $this->_binds;
-        $_tempRelation = $this->relations;
+        // Store the original query state
+        $originalState = [
+            'connectionName' => $this->connectionName,
+            'table' => $this->table,
+            'column' => $this->column,
+            'orderBy' => $this->orderBy,
+            'groupBy' => $this->groupBy,
+            'where' => $this->where,
+            'joins' => $this->joins,
+            'binds' => $this->_binds,
+            'relations' => $this->relations,
+        ];
 
         while (true) {
-
-            // Set back to original value for next details
-            $this->connectionName = $_tempConnection;
-            $this->table = $_tempTable;
-            $this->column = $_tempColumn;
-            $this->orderBy = $_tempOrderBy;
-            $this->groupBy = $_tempGroupBy;
-            $this->where = $_tempWhere;
-            $this->joins = $_tempJoins;
-            $this->_binds = $_tempBinds;
-            $this->relations = $_tempRelation;
+            // Restore the original query state
+            $this->connectionName = $originalState['connectionName'];
+            $this->table = $originalState['table'];
+            $this->column = $originalState['column'];
+            $this->orderBy = $originalState['orderBy'];
+            $this->groupBy = $originalState['groupBy'];
+            $this->where = $originalState['where'];
+            $this->joins = $originalState['joins'];
+            $this->_binds = $originalState['binds'];
+            $this->relations = $originalState['relations'];
 
             $this->_setProfilerIdentifier('chunk_size' . $size . '_offset' . $offset);
 
+            // Apply limit and offset
             $this->limit($size)->offset($offset);
+
+            // Get results 
             $results = $this->get();
 
             if (empty($results)) {
@@ -1355,10 +1339,13 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
             }
 
             $offset += $size;
+
+            // Clear the results to free memory
+            unset($results);
         }
 
         // Unset the variables to free memory
-        unset($_tempConnection, $_tempTable, $_tempColumn, $_tempOrderBy, $_tempGroupBy, $_tempWhere, $_tempJoins, $_tempBinds, $_tempRelation);
+        unset($originalState);
 
         // Reset internal properties for next query
         $this->reset();
@@ -2012,7 +1999,7 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
             $primaryKeys = array_values(array_unique(array_column($data, $pk_id), SORT_REGULAR));
 
             // Check if batch processing is needed
-            if (count($primaryKeys) > $this->_parallelBatchSize) {
+            if (count($primaryKeys) >= 1000) {
                 $this->_processEagerLoadingInBatches($data, $primaryKeys, $table, $fk_id, $pk_id, $connectionName, $method, $alias, $callback);
             } else {
                 // Set profiler
@@ -2054,26 +2041,21 @@ abstract class BaseDatabase extends DatabaseHelper implements ConnectionInterfac
     {
         $connectionObj = $this->getInstance()->connect($connectionName);
 
-        $chunks = array_chunk($primaryKeys, $this->_parallelBatchSize);
+        $chunks = array_chunk($primaryKeys, 1000);
 
         // Initialize an empty array to store all related records
         $allRelatedRecords = [];
 
-        // Check if parallel is enabled and total $chunks more than total that need parallel to handle
-        if ($this->_parallelEnabled && count($chunks) > $this->_parallelWorker) {
-            die('Parallel mode using proc_open is not ready.');
-        } else {
-            foreach ($chunks as $key => $chunk) {
+        foreach ($chunks as $key => $chunk) {
 
-                // Set profiler
-                $this->_setProfilerIdentifier('with_' . $alias . '_' . ($key + 1));
+            // Set profiler
+            $this->_setProfilerIdentifier('with_' . $alias . '_' . ($key + 1));
 
-                // Process chunk directly without parallelism
-                $chunkRelatedRecords = $this->_processEagerByChunk($chunk, $callback, $connectionObj, $table, $fk_id);
+            // Process chunk directly without parallelism
+            $chunkRelatedRecords = $this->_processEagerByChunk($chunk, $callback, $connectionObj, $table, $fk_id);
 
-                // Merge chunk results into the allRelatedRecords array
-                $allRelatedRecords = array_merge($allRelatedRecords, $chunkRelatedRecords);
-            }
+            // Merge chunk results into the allRelatedRecords array
+            $allRelatedRecords = array_merge($allRelatedRecords, $chunkRelatedRecords);
         }
 
         // Attach related data to the main data
