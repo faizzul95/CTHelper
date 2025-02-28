@@ -1,7 +1,7 @@
 <?php
 
 include_once 'TestHelper.php';
-include_once '../config.php';
+include_once '../../config.php';
 
 use Core\Database\Database;
 

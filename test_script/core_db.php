@@ -1,31 +1,14 @@
 <?php
 
-if (file_exists('vendor/autoload.php'))
-    include_once 'vendor/autoload.php';
+if (file_exists('../vendor/autoload.php'))
+    include_once '../vendor/autoload.php';
 
 use CT\Database;
-// use CT\Helpers\Input;
+use CT\Helpers\Debug;
 
-// FUNCTION FOR DEBUG
-
-function dump()
-{
-    array_map(function ($param) {
-        echo '<pre>';
-        var_dump($param);
-        echo '</pre>';
-    }, func_get_args());
-}
-
-function dd()
-{
-    array_map(function ($param) {
-        echo '<pre>';
-        print_r($param);
-        echo '</pre>';
-    }, func_get_args());
-    die;
-}
+// Set global variable
+global $debug;
+$debug = new Debug();
 
 function runTest($scriptNames)
 {
@@ -63,7 +46,7 @@ function runTest($scriptNames)
 
 // TEST SCRIPT
 
-$db = new Database('mysql','localhost', 'root', '', 'plant_db');
+$db = new Database('mysql', 'localhost', 'root', '', 'plant_db');
 
 /**
  * Script 1     : Add another connection & connect to connection.
@@ -494,7 +477,7 @@ function script20()
         ->getFullSql();
 }
 
-dd(runTest(
+$debug->dd(runTest(
     [
         // 'script1',
         // 'script2',

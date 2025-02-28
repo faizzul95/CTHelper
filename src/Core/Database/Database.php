@@ -20,7 +20,7 @@ class Database
     /**
      * @var array The list of database support.
      */
-    protected $listDatabasePlatSupport = [
+    protected $listDatabaseSupport = [
         'mysql' => 'MySQL',
         'mssql' => 'MSSQL',
         'oci' => 'Oci',
@@ -37,11 +37,11 @@ class Database
 
         $dbPlatform = strtolower($driver);
 
-        if (!isset($this->listDatabasePlatSupport[$dbPlatform])) {
+        if (!isset($this->listDatabaseSupport[$dbPlatform])) {
             throw new \InvalidArgumentException("Unsupported database driver: {$dbPlatform}");
         }
 
-        $driverClass = "Core\\Database\\Drivers\\" . $this->listDatabasePlatSupport[$dbPlatform] . "Driver";
+        $driverClass = "Core\\Database\\Drivers\\" . $this->listDatabaseSupport[$dbPlatform] . "Driver";
         $this->db = new $driverClass;
     }
 

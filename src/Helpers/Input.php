@@ -9,7 +9,6 @@ namespace CT\Helpers;
  * @package   Input
  * @author    Mohd Fahmy Izwan Zulkhafri <faizzul14@gmail.com>
  * @license   http://opensource.org/licenses/gpl-3.0.html GNU Public License
- * @link      -
  * @version   1.0.0
  */
 class Input
@@ -199,20 +198,59 @@ class Input
     }
 
     /**
-     * Generate HTML input field with specified attributes.
+     * Generate a secure HTML input field while allowing safe attributes.
      *
-     * @param string $type Type of input field.
-     * @param string $name Name attribute of the input field.
-     * @param string $value Value attribute of the input field.
+     * This function ensures:
+     * - Attribute values are scanned for malicious patterns.
+     * - Only harmful attributes are removed, leaving safe ones intact.
+     * - JavaScript event attributes (e.g., onclick, onmouseover) are allowed unless they contain XSS.
+     *
+     * @param string $type The type of input field.
+     * @param string $name The name attribute of the input field.
+     * @param string $value The value attribute of the input field.
      * @param array $attributes Additional attributes for the input field.
-     * @return string HTML representation of the input field.
+     * @return string Secure HTML representation of the input field.
      */
     protected static function generateInput($type, $name, $value = '', $attributes = array())
     {
-        $attributes['type'] = $type;
-        $attributes['name'] = $name;
-        $attributes['value'] = htmlspecialchars($value);
-        return '<input ' . self::formatAttributes($attributes) . '>';
+        // Escape essential attributes
+        $attributes['type'] = htmlspecialchars($type, ENT_QUOTES | ENT_HTML5);
+        $attributes['name'] = htmlspecialchars($name, ENT_QUOTES | ENT_HTML5);
+        $attributes['value'] = htmlspecialchars($value, ENT_QUOTES | ENT_HTML5);
+
+        // Define patterns to detect dangerous content inside attribute values
+        $xssPatterns = [
+            '/<script.*?>.*?<\/script>/is',  // Blocks <script> tags
+            '/javascript\s*:/is',           // Blocks "javascript:" URLs
+            '/document\.cookie/is',         // Prevents cookie theft
+            '/document\.location/is',       // Prevents redirections
+            '/eval\s*\(/is',                // Blocks eval()
+            '/fetch\s*\(/is',               // Blocks fetch() abuse
+            '/XMLHttpRequest/is',           // Blocks XHR-based attacks
+            '/onerror\s*=\s*["\']?.*?\b(fetch|eval|alert|XMLHttpRequest|document)\b.*?["\']?/is', // Blocks dangerous event handlers
+            '/alert\s*\(["\']?[^"\']{30,}["\']?\)/is' // Blocks alert() if it's suspiciously long
+        ];
+
+        // Filter attributes
+        $safeAttributes = [];
+        foreach ($attributes as $attrName => $attrValue) {
+            // Ensure attribute names contain only safe characters
+            if (!preg_match('/^[a-zA-Z0-9-]+$/', $attrName)) {
+                continue;
+            }
+
+            // Check if the attribute value contains actual malicious content
+            foreach ($xssPatterns as $pattern) {
+                if (preg_match($pattern, $attrValue)) {
+                    continue 2; // Skip this attribute
+                }
+            }
+
+            // Escape and add safe attribute
+            $safeAttributes[$attrName] = $attrName != 'value' ? htmlspecialchars($attrValue, ENT_QUOTES | ENT_HTML5) : $attrValue;
+        }
+
+        return '<input ' . self::formatAttributes($safeAttributes) . '>';
     }
 
     /**
@@ -225,7 +263,7 @@ class Input
     {
         $html = '';
         foreach ($attributes as $key => $value) {
-            $html .= ' ' . $key . '="' . htmlspecialchars($value) . '"';
+            $html .= ' ' . $key . '="' . $value . '"';
         }
         return $html;
     }
